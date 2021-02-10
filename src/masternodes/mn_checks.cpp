@@ -190,8 +190,9 @@ Res ApplyCustomTx(CCustomCSView & base_mnview, CCoinsViewCache const & coins, CT
             default:
                 return Res::Ok(); // not "custom" tx
         }
-        // list of transactions which aren't allowed to fail:
-        if (!res.ok && NotAllowedToFail(guess)) {
+        // list of transactions which aren't allowed to fail,
+        // post EHardfork all failed txs are marked as fatal
+        if (!res.ok && (NotAllowedToFail(guess, height) || height >= consensusParams.EHardforkHeight)) {
             res.code |= CustomTxErrCodes::Fatal;
         }
     } catch (std::exception& e) {

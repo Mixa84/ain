@@ -160,6 +160,7 @@ BASE_SCRIPTS = [
     'feature_prevent_bad_tx_propagation.py',
     'feature_masternode_operator.py',
     'feature_mine_cached.py',
+    'feature_mempool_ehardfork.py',
     'interface_http.py',
     'interface_rpc.py',
     'rpc_psbt.py',
