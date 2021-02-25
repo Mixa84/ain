@@ -1504,3 +1504,41 @@ bool IsMempooledCustomTxCreate(const CTxMemPool & pool, const uint256 & txid)
     }
     return false;
 }
+
+Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth, UniValue *rpcInfo)
+{
+    if((int)height < consensusParams.AMKHeight) { return Res::Err("Create order tx before AMK height (block %d)", consensusParams.AMKHeight); }
+
+    // Check quick conditions first
+    if (tx.vout.size() !=1 || tx.vout[0].nValue < GetMnCreationFee(height)) {
+        return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong creation fee or number of voutst)");
+    }
+
+    COrder order;
+    CDataStream ss(metadata, SER_NETWORK, PROTOCOL_VERSION);
+    ss >> static_cast<COrder &>(order);
+    if (!ss.empty()) {
+        return Res::Err("%s: deserialization failed: excess %d bytes", __func__, ss.size());
+    }
+    order.tokenFrom = trim_ws(order.tokenFrom).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
+    order.tokenTo = trim_ws(order.tokenTo).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
+
+    // Return here to avoid already exist error
+    if (rpcInfo) {
+        rpcInfo->pushKV("ownerAddress", order.ownerAddress);
+        rpcInfo->pushKV("tokenFrom", order.tokenFrom);
+        rpcInfo->pushKV("tokenTo", order.tokenTo);
+        rpcInfo->pushKV("amountFrom", order.amountFrom);
+        rpcInfo->pushKV("orderPrice", order.orderPrice);
+        rpcInfo->pushKV("expiry", order.expiry);
+
+        return Res::Ok();
+    }
+
+    // auto res = mnview.CreateToken(token, (int)height < consensusParams.BayfrontHeight);
+    // if (!res.ok) {
+    //     return Res::Err("%s %s: %s", __func__, token.symbol, res.msg);
+    // }
+
+    return Res::Ok();
+}

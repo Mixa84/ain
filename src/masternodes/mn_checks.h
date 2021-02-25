@@ -41,6 +41,9 @@ enum class CustomTxType : unsigned char
 //    CreateOrder         = 'O',
 //    DestroyOrder        = 'E',
 //    MatchOrders         = 'A',
+    CreateOrder         = 'D',
+    FulfillOrder        = 'F',
+    CloseOrder          = 'S',
     //poolpair
     CreatePoolPair      = 'p',
     UpdatePoolPair      = 'u',
@@ -86,6 +89,7 @@ inline std::string ToString(CustomTxType type) {
         case CustomTxType::AnyAccountsToAccounts:   return "AnyAccountsToAccounts";
         case CustomTxType::SetGovVariable:      return "SetGovVariable";
         case CustomTxType::AutoAuthPrep:        return "AutoAuth";
+        case CustomTxType::CreateOrder:         return "CreateOrder";
         default:                                return "None";
     }
 }
@@ -130,6 +134,8 @@ Res ApplyUtxosToAccountTx(CCustomCSView & mnview, CTransaction const & tx, uint3
 Res ApplyAccountToUtxosTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue* rpcInfo = nullptr);
 Res ApplyAccountToAccountTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue* rpcInfo = nullptr);
 Res ApplyAnyAccountsToAccountsTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue* rpcInfo = nullptr);
+
+Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue* rpcInfo = nullptr);
 
 Res ApplySetGovernanceTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue* rpcInfo = nullptr);
 
