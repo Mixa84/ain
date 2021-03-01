@@ -1,7 +1,13 @@
+#ifndef DEFI_MASTERNODES_ORDER_H
+#define DEFI_MASTERNODES_ORDER_H
+
 #include <amount.h>
 #include <script/script.h>
 #include <serialize.h>
 #include <uint256.h>
+
+#include <masternodes/tokens.h>
+#include <masternodes/res.h>
 
 class COrder
 {
@@ -14,8 +20,7 @@ public:
     std::string tokenTo;
     CAmount amountFrom;
     CAmount orderPrice;
-    int expiry;
-    
+    uint32_t expiry;
 
     COrder()
         : ownerAddress("")
@@ -40,34 +45,73 @@ public:
     }
 };
 
-// class COrderBookImplementation : public COrderBook
-// {
-// public:
-//     std::string ownerAddress;
-//     std::string tokenFrom;
-//     std::string tokenTo;
-//     CAmount amountFrom;
-//     CAmount orderPrice;
+class COrderImplemetation : public COrder
+{
+public:
+    //! tx related properties
+    uint256 creationTx;
+    uint256 closeTx;
+    uint32_t creationHeight; 
+    uint32_t closeHeight;
 
-//     COrderBookImplementation()
-//         : COrderBook()
-//         , ownerAddress(0)
-//         , tokenFrom()
-//         , tokenTo()
-//         , amountFrom(-1)
-//         , orderPrice(-1)
-//     {}
-//     ~CTokenImplementation() override = default;
+    COrderImplemetation()
+        : COrder()
+        , creationTx()
+        , closeTx()
+        , creationHeight(-1)
+        , closeHeight(-1)
+    {}
+    ~COrderImplemetation() override = default;
 
-//     ADD_SERIALIZE_METHODS;
+    ADD_SERIALIZE_METHODS;
 
-//     template <typename Stream, typename Operation>
-//     inline void SerializationOp(Stream& s, Operation ser_action) {
-//         READWRITEAS(CToken, *this);
-//         READWRITE(minted);
-//         READWRITE(creationTx);
-//         READWRITE(destructionTx);
-//         READWRITE(creationHeight);
-//         READWRITE(destructionHeight);
-//     }
-// };
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITEAS(COrder, *this);
+        READWRITE(creationTx);
+        READWRITE(closeTx);
+        READWRITE(creationHeight);
+        READWRITE(closeHeight);
+    }
+};
+
+class COrderView : public virtual CStorageView {
+public:
+    using CorderImpl = COrderImplemetation;
+
+    boost::optional<CorderImpl> GetOrderByCreationTx(const uint256 & txid) const;
+    ResVal<uint256> CreateOrder(CorderImpl const & order);
+
+    struct CreationTx { static const unsigned char prefix; };
+    struct TokenFromID { static const unsigned char prefix; };
+    struct TokenToID { static const unsigned char prefix; };
+
+};
+
+class CFulfillOrder
+{
+public:
+
+    //! basic properties
+    std::string ownerAddress;
+    uint256 orderTx;
+    CAmount amount;    
+
+    CFulfillOrder()
+        : ownerAddress("")
+        , orderTx(uint256())
+        , amount(0)
+    {}
+    virtual ~CFulfillOrder() = default;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(ownerAddress);
+        READWRITE(orderTx);
+        READWRITE(amount);
+    }
+};
+
+#endif // DEFI_MASTERNODES_ORDER_H

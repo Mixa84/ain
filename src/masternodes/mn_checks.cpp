@@ -189,6 +189,9 @@ Res ApplyCustomTx(CCustomCSView & base_mnview, CCoinsViewCache const & coins, CT
             case CustomTxType::AnyAccountsToAccounts:
                 res = ApplyAnyAccountsToAccountsTx(mnview, coins, tx, height, metadata, consensusParams, skipAuth);
                 break;
+            case CustomTxType::CreateOrder:
+                res = ApplyCreateOrderTx(mnview, coins, tx, height, metadata, consensusParams, skipAuth);
+                break;
             default:
                 return Res::Ok(); // not "custom" tx
         }
@@ -1514,12 +1517,21 @@ Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CT
         return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong creation fee or number of voutst)");
     }
 
-    COrder order;
+    COrderImplemetation order;
     CDataStream ss(metadata, SER_NETWORK, PROTOCOL_VERSION);
     ss >> static_cast<COrder &>(order);
     if (!ss.empty()) {
         return Res::Err("%s: deserialization failed: excess %d bytes", __func__, ss.size());
     }
+    
+    order.creationTx=tx.GetHash();
+    order.creationHeight = height;
+
+    CTxDestination ownerDest = DecodeDestination(order.ownerAddress);
+    if (ownerDest.which() == 0) {
+        return Res::Err("%s: %s", __func__, "ownerAdress (" + order.ownerAddress + ") does not refer to any valid address");
+    }
+
     order.tokenFrom = trim_ws(order.tokenFrom).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
     order.tokenTo = trim_ws(order.tokenTo).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
 
@@ -1530,15 +1542,15 @@ Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CT
         rpcInfo->pushKV("tokenTo", order.tokenTo);
         rpcInfo->pushKV("amountFrom", order.amountFrom);
         rpcInfo->pushKV("orderPrice", order.orderPrice);
-        rpcInfo->pushKV("expiry", order.expiry);
+        rpcInfo->pushKV("expiry", static_cast<int>(order.expiry));
 
         return Res::Ok();
     }
 
-    // auto res = mnview.CreateToken(token, (int)height < consensusParams.BayfrontHeight);
-    // if (!res.ok) {
-    //     return Res::Err("%s %s: %s", __func__, token.symbol, res.msg);
-    // }
+    auto res = mnview.CreateOrder(order);
+    if (!res.ok) {
+        return Res::Err("%s %s: %s", __func__, order.creationTx.GetHex(), res.msg);
+    }
 
     return Res::Ok();
 }

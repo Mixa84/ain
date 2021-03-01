@@ -218,6 +218,7 @@ class CCustomCSView
         , public CPoolPairView
         , public CGovView
         , public CAnchorConfirmsView
+        , public COrderView
 {
 public:
     CCustomCSView() = default;

@@ -380,8 +380,9 @@ libdefi_server_a_SOURCES = \
   masternodes/rpc_orderbook.cpp \
   masternodes/rpc_poolpair.cpp \
   masternodes/rpc_tokens.cpp \
-  masternodes/tokens.cpp \
+  masternodes/order.cpp \
   masternodes/poolpairs.cpp \
+  masternodes/tokens.cpp \
   masternodes/undos.cpp \
   miner.cpp \
   net.cpp \
