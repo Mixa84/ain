@@ -7,7 +7,7 @@ UniValue createorder(const JSONRPCRequest& request) {
                 "\nCreates (and submits to local node and network) a order creation transaction.\n" +
                 HelpRequiringPassphrase(pwallet) + "\n",
                 {
-                    {"order", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
+                    {"order", RPCArg::Type::OBJ, RPCArg::Optional::NO, "",
                         {
                             {"ownerAddress", RPCArg::Type::STR, RPCArg::Optional::NO, "Address of the owner of token"},
                             {"tokenFrom", RPCArg::Type::STR, RPCArg::Optional::NO, "Symbol or id of selling token"},
@@ -24,10 +24,10 @@ UniValue createorder(const JSONRPCRequest& request) {
                 RPCExamples{
                         HelpExampleCli("createorder", "'{\"ownerAddress\":\"tokenAddress\","
                                                         "\"tokenFrom\":\"MyToken\",\"tokenTo\":\"Token1\","
-                                                        "'\"amountFrom\":\"10\",\"orderPrice\":\"0.02\"}'")
+                                                        "\"amountFrom\":\"10\",\"orderPrice\":\"0.02\"}'")
                         + HelpExampleCli("createorder", "'{\"ownerAddress\":\"tokenAddress\","
                                                         "\"tokenFrom\":\"MyToken\",\"tokenTo\":\"Token2\","
-                                                        "'\"amountFrom\":\"5\",\"orderPrice\":\"0.1\","
+                                                        "\"amountFrom\":\"5\",\"orderPrice\":\"0.1\","
                                                         "\"expiry\":\"120\"}'")
                 },
      }.Check(request);
@@ -38,7 +38,7 @@ UniValue createorder(const JSONRPCRequest& request) {
     pwallet->BlockUntilSyncedToCurrentChain();
     LockedCoinsScopedGuard lcGuard(pwallet);
 
-    RPCTypeCheck(request.params, {UniValue::VOBJ, UniValue::VARR}, true);
+    RPCTypeCheck(request.params, {UniValue::VOBJ}, false);
     if (request.params[0].isNull()) {
         throw JSONRPCError(RPC_INVALID_PARAMETER,
                            "Invalid parameters, arguments 1 must be non-null and expected as object at least with "
@@ -58,7 +58,10 @@ UniValue createorder(const JSONRPCRequest& request) {
         tokenToSymbol = trim_ws(metaObj["tokenTo"].getValStr()).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
     }
     if (!metaObj["amountFrom"].isNull()) {
-        order.amountFrom = metaObj["amountFrom"].get_int64();
+        order.amountFrom = AmountFromValue(metaObj["amountFrom"]);
+    }
+    if (!metaObj["orderPrice"].isNull()) {
+        order.orderPrice = AmountFromValue(metaObj["orderPrice"]);
     }
     if (!metaObj["expiry"].isNull()) {
         order.expiry = metaObj["expiry"].get_int();
@@ -159,62 +162,49 @@ UniValue fulfillorder(const JSONRPCRequest& request) {
     pwallet->BlockUntilSyncedToCurrentChain();
     LockedCoinsScopedGuard lcGuard(pwallet);
 
-    RPCTypeCheck(request.params, {UniValue::VOBJ, UniValue::VARR}, true);
+    RPCTypeCheck(request.params, {UniValue::VOBJ}, false);
     if (request.params[0].isNull()) {
         throw JSONRPCError(RPC_INVALID_PARAMETER,
                            "Invalid parameters, arguments 1 must be non-null and expected as object at least with "
                            "{\"ownerAddress\",\"orderTx\",\"amount\"}");
     }
     UniValue metaObj = request.params[0].get_obj();
-    CFulfillOrder order;
+    CFulfillOrder fillorder;
 
     if (!metaObj["ownerAddress"].isNull()) {
-        order.ownerAddress = trim_ws(metaObj["ownerAddress"].getValStr());
+        fillorder.ownerAddress = trim_ws(metaObj["ownerAddress"].getValStr());
     }
     if (!metaObj["orderTx"].isNull()) {
-        order.orderTx = uint256S(metaObj["orderTx"].getValStr());
+        fillorder.orderTx = uint256S(metaObj["orderTx"].getValStr());
     }
     if (!metaObj["amount"].isNull()) {
-        order.amount = metaObj["amount"].get_int64();
+        fillorder.amount = AmountFromValue(metaObj["amount"]);
     }
-    CTxDestination ownerDest = DecodeDestination(order.ownerAddress);
+    CTxDestination ownerDest = DecodeDestination(fillorder.ownerAddress);
     if (ownerDest.which() == 0) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "ownerAdress (" + order.ownerAddress + ") does not refer to any valid address");
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "ownerAdress (" + fillorder.ownerAddress + ") does not refer to any valid address");
     }
 
     int targetHeight;
     {
         LOCK(cs_main);
-        // DCT_ID id;
-        // auto tokenFrom = pcustomcsview->GetTokenGuessId(order.tokenFrom, id);
-        // if (id == DCT_ID{0}) {
-        //     throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Can't alter DFI token!"));
-        // }
-        // if (!tokenFrom) {
-        //     throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", order.tokenFrom));
-        // }
-        // auto tokenTo = pcustomcsview->GetTokenGuessId(order.tokenTo, id);
-        // if (id == DCT_ID{0}) {
-        //     throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Can't alter DFI token!"));
-        // }
-        // if (!tokenTo) {
-        //     throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", order.tokenTo));
-        // }
-        // CBalances totalBalances;
-        // pcustomcsview->ForEachBalance([&](CScript const & owner, CTokenAmount const & balance) {
-        //     if (IsMineCached(*pwallet, owner) == ISMINE_SPENDABLE) {
-        //         totalBalances.Add(balance);
-        //     }
-        //     return true;
-        // });
-        // auto it = totalBalances.balances.begin();
-        // for (int i = 0; it != totalBalances.balances.end(); it++, i++) {
-        //     CTokenAmount bal = CTokenAmount{(*it).first, (*it).second};
-        //     std::string tokenIdStr = bal.nTokenId.ToString();
-        //     auto token = pcustomcsview->GetToken(bal.nTokenId);
-        //     if (token->CreateSymbolKey(bal.nTokenId)==order.tokenFrom && bal.nValue<order.amountFrom)
-        //         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s for order amount %s!", order.tokenFrom, order.amountFrom));
-        // }
+        auto order= pcustomcsview->GetOrderByCreationTx(fillorder.orderTx);
+
+        CBalances totalBalances;
+        pcustomcsview->ForEachBalance([&](CScript const & owner, CTokenAmount const & balance) {
+            if (IsMineCached(*pwallet, owner) == ISMINE_SPENDABLE) {
+                totalBalances.Add(balance);
+            }
+            return true;
+        });
+        auto it = totalBalances.balances.begin();
+        for (int i = 0; it != totalBalances.balances.end(); it++, i++) {
+            CTokenAmount bal = CTokenAmount{(*it).first, (*it).second};
+            std::string tokenIdStr = bal.nTokenId.ToString();
+            auto token = pcustomcsview->GetToken(bal.nTokenId);
+            if (token->CreateSymbolKey(bal.nTokenId)==order->tokenFrom && bal.nValue<order->amountFrom)
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s for order amount %s!", order->tokenFrom, order->amountFrom));
+        }
     
         targetHeight = ::ChainActive().Height() + 1;
     }
@@ -222,7 +212,7 @@ UniValue fulfillorder(const JSONRPCRequest& request) {
 
     CDataStream metadata(DfTxMarker, SER_NETWORK, PROTOCOL_VERSION);
     metadata << static_cast<unsigned char>(CustomTxType::FulfillOrder)
-             << order;
+             << fillorder;
 
     CScript scriptMeta;
     scriptMeta << OP_RETURN << ToByteVector(metadata);
@@ -239,8 +229,8 @@ UniValue fulfillorder(const JSONRPCRequest& request) {
         LOCK(cs_main);
         CCustomCSView mnview_dummy(*pcustomcsview); // don't write into actual DB
         CCoinsViewCache coinview(&::ChainstateActive().CoinsTip());
-        const auto res = ApplyCreateOrderTx(mnview_dummy, coinview, CTransaction(rawTx), targetHeight,
-                                      ToByteVector(CDataStream{SER_NETWORK, PROTOCOL_VERSION, order}), Params().GetConsensus());
+        const auto res = ApplyFulfillOrderTx(mnview_dummy, coinview, CTransaction(rawTx), targetHeight,
+                                      ToByteVector(CDataStream{SER_NETWORK, PROTOCOL_VERSION, fillorder}), Params().GetConsensus());
         if (!res.ok) {
             throw JSONRPCError(RPC_INVALID_REQUEST, "Execution test failed:\n" + res.msg);
         }
@@ -253,12 +243,12 @@ static const CRPCCommand commands[] =
 { 
 //  category        name                     actor (function)        params
 //  --------------- ----------------------   ---------------------   ----------
-    {"orderbook", "createorder",             &createorder,           {"ownerAddress", "tokenFrom", "tokenTo", "amountFrom", "orderPrice"}},
-    {"orderbook", "fulfillorder",            &fulfillorder,          {"ownerAddress", "orderTx", "amount"}},
+    {"orderbook",   "createorder",           &createorder,           {"ownerAddress", "tokenFrom", "tokenTo", "amountFrom", "orderPrice"}},
+    {"orderbook",   "fulfillorder",          &fulfillorder,          {"ownerAddress", "orderTx", "amount"}},
     // {"orderbook", "closeorder",              &closeorder,            {"pagination", "verbose"}},
 };
 
-void RegisterMasternodesRPCCommands(CRPCTable& tableRPC) {
+void RegisterOrderbookRPCCommands(CRPCTable& tableRPC) {
     for (unsigned int vcidx = 0; vcidx < ARRAYLEN(commands); vcidx++)
         tableRPC.appendCommand(commands[vcidx].name, &commands[vcidx]);
 }

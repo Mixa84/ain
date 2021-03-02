@@ -1510,11 +1510,9 @@ bool IsMempooledCustomTxCreate(const CTxMemPool & pool, const uint256 & txid)
 
 Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth, UniValue *rpcInfo)
 {
-    if((int)height < consensusParams.AMKHeight) { return Res::Err("Create order tx before AMK height (block %d)", consensusParams.AMKHeight); }
-
     // Check quick conditions first
-    if (tx.vout.size() !=1 || tx.vout[0].nValue < GetMnCreationFee(height)) {
-        return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong creation fee or number of voutst)");
+    if (tx.vout.size() !=1) {
+        return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong number of vouts)");
     }
 
     COrderImplemetation order;
@@ -1550,6 +1548,50 @@ Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CT
     auto res = mnview.CreateOrder(order);
     if (!res.ok) {
         return Res::Err("%s %s: %s", __func__, order.creationTx.GetHex(), res.msg);
+    }
+
+    return Res::Ok();
+}
+
+Res ApplyFulfillOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth, UniValue *rpcInfo)
+{
+    // Check quick conditions first
+    if (tx.vout.size() !=1) {
+        return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong number of vouts)");
+    }
+
+
+    CFulfillOrderImplemetation fillorder;
+    CDataStream ss(metadata, SER_NETWORK, PROTOCOL_VERSION);
+    ss >> static_cast<CFulfillOrder &>(fillorder);
+    if (!ss.empty()) {
+        return Res::Err("%s: deserialization failed: excess %d bytes", __func__, ss.size());
+    }
+    
+    fillorder.creationTx=tx.GetHash();
+    fillorder.creationHeight = height;
+
+    CTxDestination ownerDest = DecodeDestination(fillorder.ownerAddress);
+    if (ownerDest.which() == 0) {
+        return Res::Err("%s: %s", __func__, "ownerAdress (" + fillorder.ownerAddress + ") does not refer to any valid address");
+    }
+
+    auto order = mnview.GetOrderByCreationTx(fillorder.orderTx);
+    if (!order) {
+        return Res::Err("%s: %s", __func__, "Order tx (" + fillorder.orderTx.GetHex() + ") does not exist!");
+    }
+
+    // Return here to avoid already exist error
+    if (rpcInfo) {
+        rpcInfo->pushKV("ownerAddress", fillorder.ownerAddress);
+        rpcInfo->pushKV("orderTx", fillorder.orderTx.GetHex());
+        rpcInfo->pushKV("amount", fillorder.amount);
+        return Res::Ok();
+    }
+
+    auto res = mnview.FulfillOrder(fillorder);
+    if (!res.ok) {
+        return Res::Err("%s %s: %s", __func__, fillorder.creationTx.GetHex(), res.msg);
     }
 
     return Res::Ok();

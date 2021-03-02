@@ -219,6 +219,7 @@ class CCustomCSView
         , public CGovView
         , public CAnchorConfirmsView
         , public COrderView
+        , public CFulfillOrderView
 {
 public:
     CCustomCSView() = default;

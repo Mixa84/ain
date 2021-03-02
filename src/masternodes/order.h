@@ -77,15 +77,14 @@ public:
 
 class COrderView : public virtual CStorageView {
 public:
-    using CorderImpl = COrderImplemetation;
+    using COrderImpl = COrderImplemetation;
 
-    boost::optional<CorderImpl> GetOrderByCreationTx(const uint256 & txid) const;
-    ResVal<uint256> CreateOrder(CorderImpl const & order);
+    std::unique_ptr<COrderImpl> GetOrderByCreationTx(const uint256 & txid) const;
+    ResVal<uint256> CreateOrder(COrderImpl const & order);
 
     struct CreationTx { static const unsigned char prefix; };
     struct TokenFromID { static const unsigned char prefix; };
     struct TokenToID { static const unsigned char prefix; };
-
 };
 
 class CFulfillOrder
@@ -112,6 +111,46 @@ public:
         READWRITE(orderTx);
         READWRITE(amount);
     }
+};
+
+class CFulfillOrderImplemetation : public CFulfillOrder
+{
+public:
+    //! tx related properties
+    uint256 creationTx;
+    uint256 closeTx;
+    uint32_t creationHeight; 
+    uint32_t closeHeight;
+
+    CFulfillOrderImplemetation()
+        : CFulfillOrder()
+        , creationTx()
+        , closeTx()
+        , creationHeight(-1)
+        , closeHeight(-1)
+    {}
+    ~CFulfillOrderImplemetation() override = default;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITEAS(CFulfillOrder, *this);
+        READWRITE(creationTx);
+        READWRITE(closeTx);
+        READWRITE(creationHeight);
+        READWRITE(closeHeight);
+    }
+};
+
+class CFulfillOrderView : public virtual CStorageView {
+public:
+    using CFulfillOrderImpl = CFulfillOrderImplemetation;
+
+    std::unique_ptr<CFulfillOrderImpl> GetFulfillOrderByCreationTx(const uint256 & txid) const;
+    ResVal<uint256> FulfillOrder(CFulfillOrderImpl const & fillorder);
+
+    struct CreationTx { static const unsigned char prefix; };
 };
 
 #endif // DEFI_MASTERNODES_ORDER_H
