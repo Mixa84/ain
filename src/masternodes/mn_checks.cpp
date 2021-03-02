@@ -1511,7 +1511,7 @@ bool IsMempooledCustomTxCreate(const CTxMemPool & pool, const uint256 & txid)
 Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth, UniValue *rpcInfo)
 {
     // Check quick conditions first
-    if (tx.vout.size() !=1) {
+    if (tx.vout.size() !=2) {
         return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong number of vouts)");
     }
 
@@ -1530,11 +1530,9 @@ Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CT
         return Res::Err("%s: %s", __func__, "ownerAdress (" + order.ownerAddress + ") does not refer to any valid address");
     }
 
-    order.tokenFrom = trim_ws(order.tokenFrom).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
-    order.tokenTo = trim_ws(order.tokenTo).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
-
     // Return here to avoid already exist error
     if (rpcInfo) {
+        rpcInfo->pushKV("creationTx", order.creationTx.GetHex());
         rpcInfo->pushKV("ownerAddress", order.ownerAddress);
         rpcInfo->pushKV("tokenFrom", order.tokenFrom);
         rpcInfo->pushKV("tokenTo", order.tokenTo);
@@ -1560,7 +1558,6 @@ Res ApplyFulfillOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, C
         return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong number of vouts)");
     }
 
-
     CFulfillOrderImplemetation fillorder;
     CDataStream ss(metadata, SER_NETWORK, PROTOCOL_VERSION);
     ss >> static_cast<CFulfillOrder &>(fillorder);
@@ -1575,10 +1572,8 @@ Res ApplyFulfillOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, C
     if (ownerDest.which() == 0) {
         return Res::Err("%s: %s", __func__, "ownerAdress (" + fillorder.ownerAddress + ") does not refer to any valid address");
     }
-
-    auto order = mnview.GetOrderByCreationTx(fillorder.orderTx);
-    if (!order) {
-        return Res::Err("%s: %s", __func__, "Order tx (" + fillorder.orderTx.GetHex() + ") does not exist!");
+    if (mnview.GetOrderByCreationTx(fillorder.orderTx)) {
+        return Res::Err("order with creation tx %s does not exists!", fillorder.orderTx.GetHex());
     }
 
     // Return here to avoid already exist error

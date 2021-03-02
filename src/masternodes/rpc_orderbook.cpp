@@ -51,18 +51,23 @@ UniValue createorder(const JSONRPCRequest& request) {
     if (!metaObj["ownerAddress"].isNull()) {
         order.ownerAddress = trim_ws(metaObj["ownerAddress"].getValStr());
     }
+    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"ownerAddres\" must be non-null");
     if (!metaObj["tokenFrom"].isNull()) {
-        tokenFromSymbol = trim_ws(metaObj["tokenFrom"].getValStr()).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
+        tokenFromSymbol = trim_ws(metaObj["tokenFrom"].getValStr());
     }
+    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"tokenFrom\" must be non-null");
     if (!metaObj["tokenTo"].isNull()) {
-        tokenToSymbol = trim_ws(metaObj["tokenTo"].getValStr()).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
+        tokenToSymbol = trim_ws(metaObj["tokenTo"].getValStr());
     }
+    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"tokenTo\" must be non-null");
     if (!metaObj["amountFrom"].isNull()) {
         order.amountFrom = AmountFromValue(metaObj["amountFrom"]);
     }
+    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"amountFrom\" must be non-null");
     if (!metaObj["orderPrice"].isNull()) {
         order.orderPrice = AmountFromValue(metaObj["orderPrice"]);
     }
+    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"orderPrice\" must be non-null");
     if (!metaObj["expiry"].isNull()) {
         order.expiry = metaObj["expiry"].get_int();
     }
@@ -74,19 +79,23 @@ UniValue createorder(const JSONRPCRequest& request) {
     int targetHeight;
     {
         LOCK(cs_main);
-        DCT_ID id;
-        auto tokenFrom = pcustomcsview->GetTokenGuessId(tokenFromSymbol, id);
+        DCT_ID idTokenFrom,idTokenTo;
+        auto tokenFrom = pcustomcsview->GetTokenGuessId(tokenFromSymbol, idTokenFrom);
         if (!tokenFrom) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", order.tokenFrom));
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenFromSymbol));
         }
-        auto tokenTo = pcustomcsview->GetTokenGuessId(tokenToSymbol, id);
+        auto tokenTo = pcustomcsview->GetTokenGuessId(tokenToSymbol, idTokenTo);
         if (!tokenTo) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", order.tokenTo));
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenToSymbol));
         }
+
         order.tokenFrom=tokenFrom->symbol;
         order.tokenTo=tokenTo->symbol;
+        order.idTokenFrom=idTokenFrom;
+        order.idTokenTo=idTokenTo;
 
         CBalances totalBalances;
+        CAmount total=0;
         pcustomcsview->ForEachBalance([&](CScript const & owner, CTokenAmount const & balance) {
             if (IsMineCached(*pwallet, owner) == ISMINE_SPENDABLE) {
                 totalBalances.Add(balance);
@@ -98,9 +107,10 @@ UniValue createorder(const JSONRPCRequest& request) {
             CTokenAmount bal = CTokenAmount{(*it).first, (*it).second};
             std::string tokenIdStr = bal.nTokenId.ToString();
             auto token = pcustomcsview->GetToken(bal.nTokenId);
-            if (token->CreateSymbolKey(bal.nTokenId)==order.tokenFrom && bal.nValue<order.amountFrom)
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s for order amount %s!", order.tokenFrom, order.amountFrom));
+            if (bal.nTokenId==order.idTokenFrom) total+=bal.nValue;
         }
+        if (total<order.amountFrom)
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s for order amount %s!", order.tokenFrom, (double)order.amountFrom/COIN));
     
         targetHeight = ::ChainActive().Height() + 1;
     }
@@ -188,7 +198,9 @@ UniValue fulfillorder(const JSONRPCRequest& request) {
     int targetHeight;
     {
         LOCK(cs_main);
-        auto order= pcustomcsview->GetOrderByCreationTx(fillorder.orderTx);
+        auto order = pcustomcsview->GetOrderByCreationTx(fillorder.orderTx);
+        if (!order)
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "orderTx (" + fillorder.orderTx.GetHex() + ") does not exist");
 
         CBalances totalBalances;
         pcustomcsview->ForEachBalance([&](CScript const & owner, CTokenAmount const & balance) {

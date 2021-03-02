@@ -18,6 +18,8 @@ public:
     std::string ownerAddress;
     std::string tokenFrom;
     std::string tokenTo;
+    DCT_ID idTokenFrom;
+    DCT_ID idTokenTo;
     CAmount amountFrom;
     CAmount orderPrice;
     uint32_t expiry;
@@ -26,6 +28,8 @@ public:
         : ownerAddress("")
         , tokenFrom("")
         , tokenTo("")
+        , idTokenFrom({0})
+        , idTokenTo({0})
         , amountFrom(0)
         , orderPrice(0)
         , expiry(DEFAULT_ORDER_EXPIRY)
@@ -39,6 +43,8 @@ public:
         READWRITE(ownerAddress);
         READWRITE(tokenFrom);
         READWRITE(tokenTo);
+        READWRITE(VARINT(idTokenFrom.v));
+        READWRITE(VARINT(idTokenTo.v));
         READWRITE(amountFrom);
         READWRITE(orderPrice);
         READWRITE(expiry);
@@ -80,7 +86,7 @@ public:
     using COrderImpl = COrderImplemetation;
 
     std::unique_ptr<COrderImpl> GetOrderByCreationTx(const uint256 & txid) const;
-    ResVal<uint256> CreateOrder(COrderImpl const & order);
+    ResVal<uint256> CreateOrder(const COrderImpl& order);
 
     struct CreationTx { static const unsigned char prefix; };
     struct TokenFromID { static const unsigned char prefix; };

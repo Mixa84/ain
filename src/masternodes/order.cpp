@@ -16,25 +16,25 @@ std::unique_ptr<COrderView::COrderImpl> COrderView::GetOrderByCreationTx(const u
     return nullptr;
 }
 
-ResVal<uint256> COrderView::CreateOrder(const COrderView::COrderImpl & order)
+ResVal<uint256> COrderView::CreateOrder(const COrderView::COrderImpl& order)
 {
     //this should not happen, but for sure
     if (GetOrderByCreationTx(order.creationTx)) {
         return Res::Err("order with creation tx %s already exists!", order.creationTx.GetHex());
     }
 
-    auto pairFrom = pcustomcsview->GetToken(order.tokenFrom);
-    if (!pairFrom->second) {
-        return Res::Err("%s: token %s does not exist!", order.tokenFrom);
+    auto tokenFrom = pcustomcsview->GetToken(order.idTokenFrom);
+    if (!tokenFrom) {
+        return Res::Err("%s: token %s does not exist!", tokenFrom->symbol);
     }
-    auto pairTo = pcustomcsview->GetToken(order.tokenTo);
-    if (!pairTo->second) {
-        return Res::Err("%s: token %s does not exist!", order.tokenTo);
+    auto tokenTo = pcustomcsview->GetToken(order.idTokenTo);
+    if (!tokenTo) {
+        return Res::Err("%s: token %s does not exist!", tokenTo->symbol);
     }
 
     WriteBy<CreationTx>(order.creationTx, order);
-    WriteBy<TokenFromID>(pairFrom->first, order.creationTx);
-    WriteBy<TokenToID>(pairTo->first, order.creationTx);
+    WriteBy<TokenFromID>(order.idTokenFrom, order.creationTx);
+    WriteBy<TokenToID>(order.idTokenTo, order.creationTx);
     return {order.creationTx, Res::Ok()};
 }
 
