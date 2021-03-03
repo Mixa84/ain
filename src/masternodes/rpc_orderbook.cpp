@@ -142,11 +142,12 @@ UniValue createorder(const JSONRPCRequest& request) {
     }
     return signsend(rawTx, pwallet, {})->GetHash().GetHex();
 }
+
 UniValue fulfillorder(const JSONRPCRequest& request) {
     CWallet* const pwallet = GetWallet(request);
 
     RPCHelpMan{"fulfillorder",
-                "\nCreates (and submits to local node and network) a order creation transaction.\n" +
+                "\nCreates (and submits to local node and network) a fill order transaction.\n" +
                 HelpRequiringPassphrase(pwallet) + "\n",
                 {
                     {"order", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
@@ -167,7 +168,7 @@ UniValue fulfillorder(const JSONRPCRequest& request) {
      }.Check(request);
 
     if (pwallet->chain().isInitialBlockDownload()) {
-        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Cannot create token while still in Initial Block Download");
+        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Cannot create order while still in Initial Block Download");
     }
     pwallet->BlockUntilSyncedToCurrentChain();
     LockedCoinsScopedGuard lcGuard(pwallet);
@@ -184,12 +185,16 @@ UniValue fulfillorder(const JSONRPCRequest& request) {
     if (!metaObj["ownerAddress"].isNull()) {
         fillorder.ownerAddress = trim_ws(metaObj["ownerAddress"].getValStr());
     }
+    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"ownerAddres\" must be non-null");
     if (!metaObj["orderTx"].isNull()) {
         fillorder.orderTx = uint256S(metaObj["orderTx"].getValStr());
     }
+    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"orderTx\" must be non-null");
     if (!metaObj["amount"].isNull()) {
         fillorder.amount = AmountFromValue(metaObj["amount"]);
     }
+    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"amount\" must be non-null");
+
     CTxDestination ownerDest = DecodeDestination(fillorder.ownerAddress);
     if (ownerDest.which() == 0) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "ownerAdress (" + fillorder.ownerAddress + ") does not refer to any valid address");
@@ -250,6 +255,80 @@ UniValue fulfillorder(const JSONRPCRequest& request) {
     return signsend(rawTx, pwallet, {})->GetHash().GetHex();
 }
 
+UniValue closeorder(const JSONRPCRequest& request) {
+    CWallet* const pwallet = GetWallet(request);
+
+    RPCHelpMan{"closeorder",
+                "\nCloses (and submits to local node and network) order transaction.\n" +
+                HelpRequiringPassphrase(pwallet) + "\n",
+                {
+                    {"orderTx", RPCArg::Type::STR, RPCArg::Optional::NO, "txid of maker or taker order"},
+                },
+                RPCResult{
+                        "\"hash\"                  (string) The hex-encoded hash of broadcasted transaction\n"
+                },
+                RPCExamples{
+                        HelpExampleCli("closeorder", "'{\"orderTx\":\"txid\"}'")
+                },
+     }.Check(request);
+
+    if (pwallet->chain().isInitialBlockDownload()) {
+        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Cannot close order while still in Initial Block Download");
+    }
+    pwallet->BlockUntilSyncedToCurrentChain();
+    LockedCoinsScopedGuard lcGuard(pwallet);
+
+    RPCTypeCheck(request.params, {UniValue::VOBJ}, false);
+    if (request.params[0].isNull()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER,
+                           "Invalid parameters, arguments 1 must be non-null and expected as \"orderTx\"}");
+    }
+    uint256 orderTx = uint256S(request.params[0].getValStr());
+
+    int targetHeight;
+    {
+        LOCK(cs_main);
+        auto order = pcustomcsview->GetOrderByCreationTx(orderTx);
+        if (order)
+        {
+
+        }
+        else
+        {
+            auto fillorder = pcustomcsview->GetFulfillOrderByCreationTx(orderTx);
+        }
+    
+        targetHeight = ::ChainActive().Height() + 1;
+    }
+
+    CFulfillOrder fillorder;
+    CDataStream metadata(DfTxMarker, SER_NETWORK, PROTOCOL_VERSION);
+    metadata << static_cast<unsigned char>(CustomTxType::FulfillOrder)
+             << fillorder;
+
+    CScript scriptMeta;
+    scriptMeta << OP_RETURN << ToByteVector(metadata);
+
+    const auto txVersion = GetTransactionVersion(targetHeight);
+    CMutableTransaction rawTx(txVersion);
+
+    rawTx.vout.push_back(CTxOut(0, scriptMeta));
+
+    fund(rawTx, pwallet, {});
+
+    // check execution
+    {
+        LOCK(cs_main);
+        CCustomCSView mnview_dummy(*pcustomcsview); // don't write into actual DB
+        CCoinsViewCache coinview(&::ChainstateActive().CoinsTip());
+        const auto res = ApplyFulfillOrderTx(mnview_dummy, coinview, CTransaction(rawTx), targetHeight,
+                                      ToByteVector(CDataStream{SER_NETWORK, PROTOCOL_VERSION, fillorder}), Params().GetConsensus());
+        if (!res.ok) {
+            throw JSONRPCError(RPC_INVALID_REQUEST, "Execution test failed:\n" + res.msg);
+        }
+    }
+    return signsend(rawTx, pwallet, {})->GetHash().GetHex();
+}
 
 static const CRPCCommand commands[] =
 { 
@@ -257,7 +336,7 @@ static const CRPCCommand commands[] =
 //  --------------- ----------------------   ---------------------   ----------
     {"orderbook",   "createorder",           &createorder,           {"ownerAddress", "tokenFrom", "tokenTo", "amountFrom", "orderPrice"}},
     {"orderbook",   "fulfillorder",          &fulfillorder,          {"ownerAddress", "orderTx", "amount"}},
-    // {"orderbook", "closeorder",              &closeorder,            {"pagination", "verbose"}},
+    {"orderbook",   "closeorder",            &closeorder,            {"orderTx"}},
 };
 
 void RegisterOrderbookRPCCommands(CRPCTable& tableRPC) {

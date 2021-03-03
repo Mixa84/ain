@@ -192,6 +192,9 @@ Res ApplyCustomTx(CCustomCSView & base_mnview, CCoinsViewCache const & coins, CT
             case CustomTxType::CreateOrder:
                 res = ApplyCreateOrderTx(mnview, coins, tx, height, metadata, consensusParams, skipAuth);
                 break;
+            case CustomTxType::FulfillOrder:
+                res = ApplyFulfillOrderTx(mnview, coins, tx, height, metadata, consensusParams, skipAuth);
+                break;
             default:
                 return Res::Ok(); // not "custom" tx
         }
@@ -1554,7 +1557,7 @@ Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CT
 Res ApplyFulfillOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth, UniValue *rpcInfo)
 {
     // Check quick conditions first
-    if (tx.vout.size() !=1) {
+    if (tx.vout.size() !=2) {
         return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong number of vouts)");
     }
 
@@ -1572,7 +1575,7 @@ Res ApplyFulfillOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, C
     if (ownerDest.which() == 0) {
         return Res::Err("%s: %s", __func__, "ownerAdress (" + fillorder.ownerAddress + ") does not refer to any valid address");
     }
-    if (mnview.GetOrderByCreationTx(fillorder.orderTx)) {
+    if (!mnview.GetOrderByCreationTx(fillorder.orderTx)) {
         return Res::Err("order with creation tx %s does not exists!", fillorder.orderTx.GetHex());
     }
 

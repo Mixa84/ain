@@ -87,20 +87,23 @@ public:
 
     std::unique_ptr<COrderImpl> GetOrderByCreationTx(const uint256 & txid) const;
     ResVal<uint256> CreateOrder(const COrderImpl& order);
+    ResVal<uint256> CloseOrder(const COrderImpl& order);
+
 
     struct CreationTx { static const unsigned char prefix; };
+    struct CloseTx { static const unsigned char prefix; };
     struct TokenFromID { static const unsigned char prefix; };
     struct TokenToID { static const unsigned char prefix; };
+
 };
 
 class CFulfillOrder
 {
 public:
-
     //! basic properties
     std::string ownerAddress;
     uint256 orderTx;
-    CAmount amount;    
+    CAmount amount;
 
     CFulfillOrder()
         : ownerAddress("")
@@ -155,8 +158,10 @@ public:
 
     std::unique_ptr<CFulfillOrderImpl> GetFulfillOrderByCreationTx(const uint256 & txid) const;
     ResVal<uint256> FulfillOrder(CFulfillOrderImpl const & fillorder);
+    ResVal<uint256> CloseOrder(const CFulfillOrderImpl& fillorder);
 
     struct CreationTx { static const unsigned char prefix; };
+    struct CloseTx { static const unsigned char prefix; };
 };
 
 #endif // DEFI_MASTERNODES_ORDER_H

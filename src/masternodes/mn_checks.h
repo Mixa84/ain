@@ -38,10 +38,7 @@ enum class CustomTxType : unsigned char
     UpdateToken         = 'N', // previous type, only DAT flag triggers
     UpdateTokenAny      = 'n', // new type of token's update with any flags/fields possible
     // dex orders - just not to overlap in future
-//    CreateOrder         = 'O',
-//    DestroyOrder        = 'E',
-//    MatchOrders         = 'A',
-    CreateOrder         = 'D',
+    CreateOrder         = 'O',
     FulfillOrder        = 'F',
     CloseOrder          = 'S',
     //poolpair
@@ -62,7 +59,7 @@ enum class CustomTxType : unsigned char
 };
 
 inline CustomTxType CustomTxCodeToType(unsigned char ch) {
-    char const txtypes[] = "CRTMNnpuslrUbBaGA";
+    char const txtypes[] = "CRTMNnOFSpuslrUbBaGA";
     if (memchr(txtypes, ch, strlen(txtypes)))
         return static_cast<CustomTxType>(ch);
     else
