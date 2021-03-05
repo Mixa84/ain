@@ -1,6 +1,6 @@
 #include <masternodes/mn_rpc.h>
 
-UniValue orderToJSON(uint256 orderTx,COrderImplemetation const& order) {
+UniValue orderToJSON(COrderImplemetation const& order) {
     UniValue orderObj(UniValue::VOBJ);
     orderObj.pushKV("ownerAddress", order.ownerAddress);
     orderObj.pushKV("tokenFrom", order.tokenFrom);
@@ -10,7 +10,7 @@ UniValue orderToJSON(uint256 orderTx,COrderImplemetation const& order) {
     orderObj.pushKV("expiry", static_cast<int>(order.expiry));
 
     UniValue ret(UniValue::VOBJ);
-    ret.pushKV(orderTx.GetHex(), orderObj);
+    ret.pushKV(order.creationTx.GetHex(), orderObj);
     return ret;
 }
 
@@ -388,30 +388,14 @@ UniValue listorders(const JSONRPCRequest& request) {
     }
 
     UniValue ret(UniValue::VOBJ);
-    if (idToken.v!=std::numeric_limits<uint32_t>::max())
-    {
-        if (idTokenPair.v!=std::numeric_limits<uint32_t>::max())
-        {
-
-        }
-    }
-    else
-    {
-        int limit=20;
-        DCT_ID start={0};
-        pcustomcsview->ForEachOrder([&](DCT_ID const& id, uint256 orderTx) {
-        ret.pushKV("id", static_cast<int>(id.v));
-        ret.pushKV("creationTx", orderTx.GetHex());
+    int limit=100;
+    uint256 start;
+    pcustomcsview->ForEachOrder([&](const uint256& orderTx, COrderImplemetation order) {
+        ret.pushKVs(orderToJSON(order));
 
         limit--;
         return limit != 0;
     }, start);
-    }
-    // pcustomcsview->ForEachToken([&](DCT_ID const& id, CTokenImplementation token) {
-    //     ret.pushKVs(tokenToJSON(id, token, verbose));
-    //     limit--;
-    //     return limit != 0;
-    // }, start);
 
     return ret;
 }

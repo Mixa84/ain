@@ -1,14 +1,11 @@
 #include <masternodes/order.h>
-#include <masternodes/masternodes.h>
+// #include <masternodes/masternodes.h>
 
 /// @attention make sure that it does not overlap with other views !!!
 const unsigned char COrderView::OrderCreationTx  ::prefix = 'O';
 const unsigned char COrderView::FulfillCreationTx  ::prefix = 'D';
 const unsigned char COrderView::CloseCreationTx  ::prefix = 'E';
-const unsigned char COrderView::TokenFromID  ::prefix = 'P';
-const unsigned char COrderView::TokenToID  ::prefix = 'R';
-const unsigned char COrderView::CloseTx  ::prefix = 'C';
-
+const unsigned char COrderView::OrderCloseTx  ::prefix = 'C';
 
 std::unique_ptr<COrderView::COrderImpl> COrderView::GetOrderByCreationTx(const uint256 & txid) const
 {
@@ -26,17 +23,7 @@ ResVal<uint256> COrderView::CreateOrder(const COrderView::COrderImpl& order)
     }
     DCT_ID idTokenFrom=order.idTokenFrom;
     DCT_ID idTokenTo=order.idTokenTo;
-    auto tokenFrom = pcustomcsview->GetToken(idTokenFrom);
-    if (!tokenFrom) {
-        return Res::Err("%s: token %s does not exist!", tokenFrom->symbol);
-    }
-    auto tokenTo = pcustomcsview->GetToken(idTokenTo);
-    if (!tokenTo) {
-        return Res::Err("%s: token %s does not exist!", tokenTo->symbol);
-    }
     WriteBy<OrderCreationTx>(order.creationTx, order);
-    WriteBy<TokenFromID>(WrapVarInt(idTokenFrom.v), order.creationTx);
-    WriteBy<TokenToID>(WrapVarInt(idTokenTo.v), order.creationTx);
 
     return {order.creationTx, Res::Ok()};
 }
@@ -48,19 +35,18 @@ ResVal<uint256> COrderView::CloseOrderTx(const COrderView::COrderImpl& order)
     }
     EraseBy<OrderCreationTx>(order.creationTx);
     WriteBy<OrderCreationTx>(order.creationTx, order);
-    WriteBy<CloseTx>(order.closeTx, order.creationTx);
+    WriteBy<OrderCloseTx>(order.closeTx, order.creationTx);
 
     return {order.closeTx, Res::Ok()};
 }
 
-void COrderView::ForEachOrder(std::function<bool (const DCT_ID&, uint256)> callback, DCT_ID const & start)
+void COrderView::ForEachOrder(std::function<bool (const uint256&, CLazySerialize<COrderImpl>)> callback, const uint256& startTx)
 {
-    DCT_ID tokenId = start;
-    auto hint = WrapVarInt(tokenId.v);
-
-    ForEach<TokenFromID, CVarInt<VarIntMode::DEFAULT, uint32_t>, uint256>([&tokenId, &callback] (CVarInt<VarIntMode::DEFAULT, uint32_t> const &, uint256 orderTx) {
-        return callback(tokenId, orderTx);
-    }, hint);
+    uint256 orderTx;
+    if (!startTx.IsNull()) orderTx=startTx;
+    ForEach<OrderCreationTx, uint256, COrderImpl>([&orderTx, &callback] (const uint256&, CLazySerialize<COrderImpl> order) {
+        return callback(orderTx, order);
+    },startTx);
 }
 
 std::unique_ptr<COrderView::CFulfillOrderImpl> COrderView::GetFulfillOrderByCreationTx(const uint256 & txid) const

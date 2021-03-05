@@ -1536,6 +1536,15 @@ Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CT
         return Res::Err("%s: %s", __func__, "ownerAdress (" + order.ownerAddress + ") does not refer to any valid address");
     }
 
+    auto tokenFrom = mnview.GetToken(order.idTokenFrom);
+    if (!tokenFrom) {
+        return Res::Err("%s: token %s does not exist!", tokenFrom->symbol);
+    }
+    auto tokenTo = mnview.GetToken(order.idTokenTo);
+    if (!tokenTo) {
+        return Res::Err("%s: token %s does not exist!", tokenTo->symbol);
+    }
+
     // Return here to avoid already exist error
     if (rpcInfo) {
         rpcInfo->pushKV("creationTx", order.creationTx.GetHex());

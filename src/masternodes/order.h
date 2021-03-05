@@ -2,11 +2,9 @@
 #define DEFI_MASTERNODES_ORDER_H
 
 #include <amount.h>
-#include <script/script.h>
-#include <serialize.h>
 #include <uint256.h>
 
-#include <masternodes/tokens.h>
+#include <flushablestorage.h>
 #include <masternodes/res.h>
 
 class COrder
@@ -188,18 +186,19 @@ public:
     std::unique_ptr<COrderImpl> GetOrderByCreationTx(const uint256 & txid) const;
     ResVal<uint256> CreateOrder(const COrderImpl& order);
     ResVal<uint256> CloseOrderTx(const COrderImpl& order);
-    void ForEachOrder(std::function<bool (const DCT_ID&, uint256)> callback, DCT_ID const & start);
+    void ForEachOrder(std::function<bool (const uint256&, CLazySerialize<COrderImpl>)> callback, const uint256 & start);
+    void ForEachOrderByToken(std::function<bool (const DCT_ID&, uint256)> callback,const DCT_ID & start);
+
     std::unique_ptr<CFulfillOrderImpl> GetFulfillOrderByCreationTx(const uint256 & txid) const;
     ResVal<uint256> FulfillOrder(const CFulfillOrderImpl& fillorder);
+
     std::unique_ptr<CCloseOrderImpl> GetCloseOrderByCreationTx(const uint256 & txid) const;
     ResVal<uint256> CloseOrder(const CCloseOrderImpl& closeorder);
 
     struct OrderCreationTx { static const unsigned char prefix; };
     struct FulfillCreationTx { static const unsigned char prefix; };
     struct CloseCreationTx { static const unsigned char prefix; };
-    struct CloseTx { static const unsigned char prefix; };
-    struct TokenFromID { static const unsigned char prefix; };
-    struct TokenToID { static const unsigned char prefix; };
+    struct OrderCloseTx { static const unsigned char prefix; };
 };
 
 #endif // DEFI_MASTERNODES_ORDER_H
