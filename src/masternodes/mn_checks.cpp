@@ -195,6 +195,9 @@ Res ApplyCustomTx(CCustomCSView & base_mnview, CCoinsViewCache const & coins, CT
             case CustomTxType::FulfillOrder:
                 res = ApplyFulfillOrderTx(mnview, coins, tx, height, metadata, consensusParams, skipAuth);
                 break;
+            case CustomTxType::CloseOrder:
+                res = ApplyCloseOrderTx(mnview, coins, tx, height, metadata, consensusParams, skipAuth);
+                break;
             default:
                 return Res::Ok(); // not "custom" tx
         }
@@ -1591,6 +1594,49 @@ Res ApplyFulfillOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, C
     if (!res.ok) {
         return Res::Err("%s %s: %s", __func__, fillorder.creationTx.GetHex(), res.msg);
     }
+
+    return Res::Ok();
+}
+
+Res ApplyCloseOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth, UniValue *rpcInfo)
+{
+    // Check quick conditions first
+    if (tx.vout.size() !=2) {
+        return Res::Err("%s: %s", __func__, "malformed tx vouts (wrong number of vouts)");
+    }
+
+    CCloseOrderImplemetation closeorder;
+    CDataStream ss(metadata, SER_NETWORK, PROTOCOL_VERSION);
+    ss >> static_cast<CCloseOrder &>(closeorder);
+    if (!ss.empty()) {
+        return Res::Err("%s: deserialization failed: excess %d bytes", __func__, ss.size());
+    }
+    
+    closeorder.creationTx=tx.GetHash();
+    closeorder.creationHeight = height;
+
+    std::unique_ptr<COrderImplemetation> order;
+    if (!(order=mnview.GetOrderByCreationTx(closeorder.orderTx))) {
+        return Res::Err("order with creation tx %s does not exists!", closeorder.orderTx.GetHex());
+    }
+
+    order->closeTx=closeorder.creationTx;
+    order->closeHeight=closeorder.creationHeight;
+
+    // Return here to avoid already exist error
+    if (rpcInfo) {
+        rpcInfo->pushKV("orderTx", closeorder.orderTx.GetHex());
+        return Res::Ok();
+    }
+
+    // auto res = mnview.CloseOrder(closeorder);
+    // if (!res.ok) {
+    //     return Res::Err("%s %s: %s", __func__, closeorder.creationTx.GetHex(), res.msg);
+    // }
+    // res = mnview.CloseOrderTx(*order);
+    // if (!res.ok) {
+    //     return Res::Err("%s %s: %s", __func__, closeorder.creationTx.GetHex(), res.msg);
+    // }
 
     return Res::Ok();
 }

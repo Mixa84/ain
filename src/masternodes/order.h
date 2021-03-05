@@ -81,22 +81,6 @@ public:
     }
 };
 
-class COrderView : public virtual CStorageView {
-public:
-    using COrderImpl = COrderImplemetation;
-
-    std::unique_ptr<COrderImpl> GetOrderByCreationTx(const uint256 & txid) const;
-    ResVal<uint256> CreateOrder(const COrderImpl& order);
-    ResVal<uint256> CloseOrder(const COrderImpl& order);
-
-
-    struct CreationTx { static const unsigned char prefix; };
-    struct CloseTx { static const unsigned char prefix; };
-    struct TokenFromID { static const unsigned char prefix; };
-    struct TokenToID { static const unsigned char prefix; };
-
-};
-
 class CFulfillOrder
 {
 public:
@@ -152,16 +136,70 @@ public:
     }
 };
 
-class CFulfillOrderView : public virtual CStorageView {
+class CCloseOrder
+{
 public:
+    //! basic properties
+    uint256 orderTx;
+
+    CCloseOrder()
+        : orderTx(uint256())
+    {}
+    virtual ~CCloseOrder() = default;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(orderTx);
+    }
+};
+
+class CCloseOrderImplemetation : public CCloseOrder
+{
+public:
+    //! tx related properties
+    uint256 creationTx;
+    uint32_t creationHeight; 
+
+    CCloseOrderImplemetation()
+        : CCloseOrder()
+        , creationTx()
+        , creationHeight(-1)
+    {}
+    ~CCloseOrderImplemetation() override = default;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITEAS(CCloseOrder, *this);
+        READWRITE(creationTx);
+        READWRITE(creationHeight);
+    }
+};
+
+class COrderView : public virtual CStorageView {
+public:
+    using COrderImpl = COrderImplemetation;
     using CFulfillOrderImpl = CFulfillOrderImplemetation;
+    using CCloseOrderImpl = CCloseOrderImplemetation;
 
+    std::unique_ptr<COrderImpl> GetOrderByCreationTx(const uint256 & txid) const;
+    ResVal<uint256> CreateOrder(const COrderImpl& order);
+    ResVal<uint256> CloseOrderTx(const COrderImpl& order);
+    void ForEachOrder(std::function<bool (const DCT_ID&, uint256)> callback, DCT_ID const & start);
     std::unique_ptr<CFulfillOrderImpl> GetFulfillOrderByCreationTx(const uint256 & txid) const;
-    ResVal<uint256> FulfillOrder(CFulfillOrderImpl const & fillorder);
-    ResVal<uint256> CloseOrder(const CFulfillOrderImpl& fillorder);
+    ResVal<uint256> FulfillOrder(const CFulfillOrderImpl& fillorder);
+    std::unique_ptr<CCloseOrderImpl> GetCloseOrderByCreationTx(const uint256 & txid) const;
+    ResVal<uint256> CloseOrder(const CCloseOrderImpl& closeorder);
 
-    struct CreationTx { static const unsigned char prefix; };
+    struct OrderCreationTx { static const unsigned char prefix; };
+    struct FulfillCreationTx { static const unsigned char prefix; };
+    struct CloseCreationTx { static const unsigned char prefix; };
     struct CloseTx { static const unsigned char prefix; };
+    struct TokenFromID { static const unsigned char prefix; };
+    struct TokenToID { static const unsigned char prefix; };
 };
 
 #endif // DEFI_MASTERNODES_ORDER_H

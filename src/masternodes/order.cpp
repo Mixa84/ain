@@ -2,18 +2,17 @@
 #include <masternodes/masternodes.h>
 
 /// @attention make sure that it does not overlap with other views !!!
-const unsigned char COrderView::CreationTx  ::prefix = 'O';
+const unsigned char COrderView::OrderCreationTx  ::prefix = 'O';
+const unsigned char COrderView::FulfillCreationTx  ::prefix = 'D';
+const unsigned char COrderView::CloseCreationTx  ::prefix = 'E';
 const unsigned char COrderView::TokenFromID  ::prefix = 'P';
 const unsigned char COrderView::TokenToID  ::prefix = 'R';
 const unsigned char COrderView::CloseTx  ::prefix = 'C';
 
-const unsigned char CFulfillOrderView::CreationTx  ::prefix = 'E';
-const unsigned char CFulfillOrderView::CloseTx  ::prefix = 'D';
-
 
 std::unique_ptr<COrderView::COrderImpl> COrderView::GetOrderByCreationTx(const uint256 & txid) const
 {
-    auto orderImpl=ReadBy<CreationTx, COrderImpl>(txid);
+    auto orderImpl=ReadBy<OrderCreationTx, COrderImpl>(txid);
     if (orderImpl) 
         return MakeUnique<COrderImpl>(*orderImpl);
     return nullptr;
@@ -35,52 +34,68 @@ ResVal<uint256> COrderView::CreateOrder(const COrderView::COrderImpl& order)
     if (!tokenTo) {
         return Res::Err("%s: token %s does not exist!", tokenTo->symbol);
     }
-    WriteBy<CreationTx>(order.creationTx, order);
+    WriteBy<OrderCreationTx>(order.creationTx, order);
     WriteBy<TokenFromID>(WrapVarInt(idTokenFrom.v), order.creationTx);
     WriteBy<TokenToID>(WrapVarInt(idTokenTo.v), order.creationTx);
 
     return {order.creationTx, Res::Ok()};
 }
 
-ResVal<uint256> COrderView::CloseOrder(const COrderView::COrderImpl& order)
+ResVal<uint256> COrderView::CloseOrderTx(const COrderView::COrderImpl& order)
 {
     if (!GetOrderByCreationTx(order.creationTx)) {
         return Res::Err("order with creation tx %s doesn't exists!", order.creationTx.GetHex());
     }
-    EraseBy<CreationTx>(order.creationTx);
-    WriteBy<CreationTx>(order.creationTx, order);
+    EraseBy<OrderCreationTx>(order.creationTx);
+    WriteBy<OrderCreationTx>(order.creationTx, order);
     WriteBy<CloseTx>(order.closeTx, order.creationTx);
 
     return {order.closeTx, Res::Ok()};
 }
 
-std::unique_ptr<CFulfillOrderView::CFulfillOrderImpl> CFulfillOrderView::GetFulfillOrderByCreationTx(const uint256 & txid) const
+void COrderView::ForEachOrder(std::function<bool (const DCT_ID&, uint256)> callback, DCT_ID const & start)
 {
-    auto fillorderImpl=ReadBy<CreationTx, CFulfillOrderImpl>(txid);
+    DCT_ID tokenId = start;
+    auto hint = WrapVarInt(tokenId.v);
+
+    ForEach<TokenFromID, CVarInt<VarIntMode::DEFAULT, uint32_t>, uint256>([&tokenId, &callback] (CVarInt<VarIntMode::DEFAULT, uint32_t> const &, uint256 orderTx) {
+        return callback(tokenId, orderTx);
+    }, hint);
+}
+
+std::unique_ptr<COrderView::CFulfillOrderImpl> COrderView::GetFulfillOrderByCreationTx(const uint256 & txid) const
+{
+    auto fillorderImpl=ReadBy<FulfillCreationTx, CFulfillOrderImpl>(txid);
     if (fillorderImpl)
         return MakeUnique<CFulfillOrderImpl>(*fillorderImpl);
     return nullptr;
 }
 
-ResVal<uint256> CFulfillOrderView::FulfillOrder(const CFulfillOrderView::CFulfillOrderImpl & fillorder)
+ResVal<uint256> COrderView::FulfillOrder(const COrderView::CFulfillOrderImpl & fillorder)
 {
     //this should not happen, but for sure
     if (GetFulfillOrderByCreationTx(fillorder.creationTx)) {
         return Res::Err("fillorder with creation tx %s already exists!", fillorder.creationTx.GetHex());
     }
 
-    WriteBy<CreationTx>(fillorder.creationTx, fillorder);
+    WriteBy<FulfillCreationTx>(fillorder.creationTx, fillorder);
     return {fillorder.creationTx, Res::Ok()};
 }
 
-ResVal<uint256> CFulfillOrderView::CloseOrder(const CFulfillOrderView::CFulfillOrderImpl& fillorder)
+std::unique_ptr<COrderView::CCloseOrderImpl> COrderView::GetCloseOrderByCreationTx(const uint256 & txid) const
 {
-    if (!GetFulfillOrderByCreationTx(fillorder.creationTx)) {
-        return Res::Err("order with creation tx %s doesn't exists!", fillorder.creationTx.GetHex());
-    }
-    EraseBy<CreationTx>(fillorder.creationTx);
-    WriteBy<CreationTx>(fillorder.creationTx, fillorder);
-    WriteBy<CloseTx>(fillorder.closeTx, fillorder.creationTx);
+    auto closeorderImpl=ReadBy<CloseCreationTx, CCloseOrderImpl>(txid);
+    if (closeorderImpl)
+        return MakeUnique<CCloseOrderImpl>(*closeorderImpl);
+    return nullptr;
+}
 
-    return {fillorder.closeTx, Res::Ok()};
+ResVal<uint256> COrderView::CloseOrder(const COrderView::CCloseOrderImpl& closeorder)
+{
+    if (GetCloseOrderByCreationTx(closeorder.creationTx)) {
+        return Res::Err("close with creation tx %s already exists!", closeorder.creationTx.GetHex());
+    }
+    WriteBy<CloseCreationTx>(closeorder.creationTx, closeorder);
+
+    return {closeorder.creationTx, Res::Ok()};
 }

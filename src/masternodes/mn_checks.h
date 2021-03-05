@@ -88,6 +88,7 @@ inline std::string ToString(CustomTxType type) {
         case CustomTxType::AutoAuthPrep:        return "AutoAuth";
         case CustomTxType::CreateOrder:         return "CreateOrder";
         case CustomTxType::FulfillOrder:        return "FulfillOrder";
+        case CustomTxType::CloseOrder:          return "CloseOrder";
         default:                                return "None";
     }
 }
@@ -135,6 +136,7 @@ Res ApplyAnyAccountsToAccountsTx(CCustomCSView & mnview, CCoinsViewCache const &
 
 Res ApplyCreateOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue* rpcInfo = nullptr);
 Res ApplyFulfillOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue* rpcInfo = nullptr);
+Res ApplyCloseOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue *rpcInfo = nullptr);
 
 Res ApplySetGovernanceTx(CCustomCSView & mnview, CCoinsViewCache const & coins, CTransaction const & tx, uint32_t height, std::vector<unsigned char> const & metadata, Consensus::Params const & consensusParams, bool skipAuth = false, UniValue* rpcInfo = nullptr);
 
