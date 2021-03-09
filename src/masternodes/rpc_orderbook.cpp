@@ -347,8 +347,8 @@ UniValue listorders(const JSONRPCRequest& request) {
                 {
                     {"by", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
                         {
-                            {"token", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Token symbol"},
-                            {"tokenPair", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Token symbol"},
+                            {"token1", RPCArg::Type::STR, RPCArg::Optional::NO, "Token symbol"},
+                            {"token2", RPCArg::Type::STR, RPCArg::Optional::NO, "Token symbol"},
                         },
                     },
                 },
@@ -363,41 +363,54 @@ UniValue listorders(const JSONRPCRequest& request) {
                 },
      }.Check(request);
 
-    std::string tokenSymbol,tokenPairSymbol;
+    std::string token1Symbol,token2Symbol;
     if (request.params.size() > 0)
     {
         UniValue byObj = request.params[0].get_obj();
-        if (!byObj["token"].isNull()) tokenSymbol=trim_ws(byObj["token"].getValStr());
-        if (!byObj["tokenPair"].isNull()) tokenPairSymbol=trim_ws(byObj["tokenPair"].getValStr());
+        if (!byObj["token1"].isNull()) token1Symbol=trim_ws(byObj["token1"].getValStr());
+        if (!byObj["token2"].isNull()) token2Symbol=trim_ws(byObj["token2"].getValStr());
     }
 
-    DCT_ID idToken={std::numeric_limits<uint32_t>::max()},idTokenPair={std::numeric_limits<uint32_t>::max()};
-    if (!tokenSymbol.empty())
+    DCT_ID idToken1={std::numeric_limits<uint32_t>::max()},idToken2={std::numeric_limits<uint32_t>::max()};
+    if (!token1Symbol.empty())
     {
-        auto token = pcustomcsview->GetTokenGuessId(tokenSymbol, idToken);
-            if (!token) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenSymbol));
+        auto token1 = pcustomcsview->GetTokenGuessId(token1Symbol, idToken1);
+            if (!token1) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", token1Symbol));
             }
     }
-    if (!tokenPairSymbol.empty())
+    if (!token2Symbol.empty())
     {
-        auto tokenPair = pcustomcsview->GetTokenGuessId(tokenPairSymbol, idTokenPair);
-            if (!tokenPair) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenSymbol));
+        auto token2 = pcustomcsview->GetTokenGuessId(token2Symbol, idToken2);
+            if (!token2) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", token2Symbol));
             }
     }
 
     UniValue ret(UniValue::VOBJ);
     int limit=100;
-    uint256 start;
-    pcustomcsview->ForEachOrder([&](const uint256& orderTx, COrderImplemetation order) {
-        ret.pushKVs(orderToJSON(order));
+    if (idToken1.v!=std::numeric_limits<uint32_t>::max() && idToken2.v!=std::numeric_limits<uint32_t>::max())
+    {
+        COrderView::TokenPair prefix(idToken1,idToken2);
+        pcustomcsview->ForEachOrder([&](COrderView::TokenPairKey const & key, COrderImplemetation order) {
+            ret.pushKVs(orderToJSON(order));
 
-        limit--;
-        return limit != 0;
-    }, start);
+            limit--;
+            return limit != 0;
+        },prefix);
 
-    return ret;
+        return ret;
+    }
+    else
+    {
+        pcustomcsview->ForEachOrder([&](COrderView::TokenPairKey const & key, COrderImplemetation order) {
+            ret.pushKVs(orderToJSON(order));
+
+            limit--;
+            return limit != 0;
+        });
+        return ret;
+    }
 }
 
 static const CRPCCommand commands[] =

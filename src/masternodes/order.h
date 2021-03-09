@@ -179,6 +179,9 @@ public:
 
 class COrderView : public virtual CStorageView {
 public:
+    typedef std::pair<DCT_ID,DCT_ID> TokenPair;
+    typedef std::pair<TokenPair,uint256> TokenPairKey;
+
     using COrderImpl = COrderImplemetation;
     using CFulfillOrderImpl = CFulfillOrderImplemetation;
     using CCloseOrderImpl = CCloseOrderImplemetation;
@@ -186,8 +189,21 @@ public:
     std::unique_ptr<COrderImpl> GetOrderByCreationTx(const uint256 & txid) const;
     ResVal<uint256> CreateOrder(const COrderImpl& order);
     ResVal<uint256> CloseOrderTx(const COrderImpl& order);
-    void ForEachOrder(std::function<bool (const uint256&, CLazySerialize<COrderImpl>)> callback, const uint256 & start);
-    void ForEachOrderByToken(std::function<bool (const DCT_ID&, uint256)> callback,const DCT_ID & start);
+    void ForEachOrder(std::function<bool (TokenPairKey const &, CLazySerialize<COrderImpl>)> callback, TokenPair const & pair=TokenPair());    
+    
+    template<typename By, typename KeyType, typename ValueType>
+    bool ForEachOrder(std::function<bool(KeyType const &, CLazySerialize<ValueType>)> callback, KeyType const & start = KeyType()) const {
+        auto& self = const_cast<COrderView&>(*this);
+        auto it = self.DB().NewIterator();        
+        auto key = std::make_pair(By::prefix, start);
+        for(it->Seek(DbTypeToBytes(key)); it->Valid() && BytesToDbType(it->Key(), key) && key.first == By::prefix; it->Next())
+        {
+            boost::this_thread::interruption_point();
+            if ((start!=KeyType() && key.second.first!=start.first) || !callback(key.second, CLazySerialize<COrderImpl>(*it)))
+                break;
+        }
+        return true;
+    }
 
     std::unique_ptr<CFulfillOrderImpl> GetFulfillOrderByCreationTx(const uint256 & txid) const;
     ResVal<uint256> FulfillOrder(const CFulfillOrderImpl& fillorder);
@@ -196,6 +212,7 @@ public:
     ResVal<uint256> CloseOrder(const CCloseOrderImpl& closeorder);
 
     struct OrderCreationTx { static const unsigned char prefix; };
+    struct OrderCreationTxId { static const unsigned char prefix; };
     struct FulfillCreationTx { static const unsigned char prefix; };
     struct CloseCreationTx { static const unsigned char prefix; };
     struct OrderCloseTx { static const unsigned char prefix; };
