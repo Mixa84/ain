@@ -276,7 +276,7 @@ UniValue closeorder(const JSONRPCRequest& request) {
                 "\nCloses (and submits to local node and network) order transaction.\n" +
                 HelpRequiringPassphrase(pwallet) + "\n",
                 {
-                    {"orderTx", RPCArg::Type::STR, RPCArg::Optional::NO, "txid of maker or taker order"},
+                    {"orderTx", RPCArg::Type::STR, RPCArg::Optional::NO, "txid of maker order"},
                 },
                 RPCResult{
                         "\"hash\"                  (string) The hex-encoded hash of broadcasted transaction\n"

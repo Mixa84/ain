@@ -188,7 +188,7 @@ public:
 
     std::unique_ptr<COrderImpl> GetOrderByCreationTx(const uint256 & txid) const;
     ResVal<uint256> CreateOrder(const COrderImpl& order);
-    ResVal<uint256> CloseOrderTx(const COrderImpl& order);
+    ResVal<uint256> CloseOrderTx(const uint256& txid);
     void ForEachOrder(std::function<bool (TokenPairKey const &, CLazySerialize<COrderImpl>)> callback, TokenPair const & pair=TokenPair());    
     
     template<typename By, typename KeyType, typename ValueType>
@@ -214,6 +214,7 @@ public:
     struct OrderCreationTx { static const unsigned char prefix; };
     struct OrderCreationTxId { static const unsigned char prefix; };
     struct FulfillCreationTx { static const unsigned char prefix; };
+    struct FulfillOrderTxid { static const unsigned char prefix; };
     struct CloseCreationTx { static const unsigned char prefix; };
     struct OrderCloseTx { static const unsigned char prefix; };
 };

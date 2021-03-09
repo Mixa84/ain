@@ -5,6 +5,7 @@
 const unsigned char COrderView::OrderCreationTx  ::prefix = 'O';
 const unsigned char COrderView::OrderCreationTxId  ::prefix = 'P';
 const unsigned char COrderView::FulfillCreationTx  ::prefix = 'D';
+const unsigned char COrderView::FulfillOrderTxid  ::prefix = 'Q';
 const unsigned char COrderView::CloseCreationTx  ::prefix = 'E';
 const unsigned char COrderView::OrderCloseTx  ::prefix = 'C';
 
@@ -34,18 +35,19 @@ ResVal<uint256> COrderView::CreateOrder(const COrderView::COrderImpl& order)
     return {order.creationTx, Res::Ok()};
 }
 
-ResVal<uint256> COrderView::CloseOrderTx(const COrderView::COrderImpl& order)
+ResVal<uint256> COrderView::CloseOrderTx(const uint256& txid)
 {
-    if (!GetOrderByCreationTx(order.creationTx)) {
-        return Res::Err("order with creation tx %s doesn't exists!", order.creationTx.GetHex());
+    auto order=GetOrderByCreationTx(txid);
+    if (!order) {
+        return Res::Err("order with creation tx %s doesn't exists!", txid.GetHex());
     }
 
-    TokenPair pair(order.idTokenFrom,order.idTokenTo);
-    TokenPairKey key(pair,order.creationTx);
+    TokenPair pair(order->idTokenFrom,order->idTokenTo);
+    TokenPairKey key(pair,order->creationTx);
     EraseBy<OrderCreationTx>(key);
-    WriteBy<OrderCreationTx>(key,order);
-    WriteBy<OrderCloseTx>(order.closeTx, order.creationTx);
-    return {order.closeTx, Res::Ok()};
+    WriteBy<OrderCreationTx>(key,*order);
+    WriteBy<OrderCloseTx>(order->closeTx, order->creationTx);
+    return {order->creationTx, Res::Ok()};
 }
 
 void COrderView::ForEachOrder(std::function<bool (COrderView::TokenPairKey const &, CLazySerialize<COrderView::COrderImpl>)> callback, TokenPair const & pair)
@@ -58,10 +60,14 @@ void COrderView::ForEachOrder(std::function<bool (COrderView::TokenPairKey const
 
 std::unique_ptr<COrderView::CFulfillOrderImpl> COrderView::GetFulfillOrderByCreationTx(const uint256 & txid) const
 {
-    auto fillorderImpl=ReadBy<FulfillCreationTx, CFulfillOrderImpl>(txid);
-    if (fillorderImpl)
-        return MakeUnique<CFulfillOrderImpl>(*fillorderImpl);
-    return nullptr;
+    auto ordertxid=ReadBy<FulfillOrderTxid, uint256>(txid);
+    if (!ordertxid->IsNull())
+    {
+        auto fillorderImpl=ReadBy<FulfillCreationTx,CFulfillOrderImpl>(std::make_pair(*ordertxid,txid));
+        if (fillorderImpl)
+            return MakeUnique<CFulfillOrderImpl>(*fillorderImpl);
+        return nullptr;
+    }
 }
 
 ResVal<uint256> COrderView::FulfillOrder(const COrderView::CFulfillOrderImpl & fillorder)
@@ -71,7 +77,8 @@ ResVal<uint256> COrderView::FulfillOrder(const COrderView::CFulfillOrderImpl & f
         return Res::Err("fillorder with creation tx %s already exists!", fillorder.creationTx.GetHex());
     }
 
-    WriteBy<FulfillCreationTx>(fillorder.creationTx, fillorder);
+    WriteBy<FulfillOrderTxid>(fillorder.creationTx, fillorder.orderTx);
+    WriteBy<FulfillCreationTx>(std::make_pair(fillorder.orderTx,fillorder.creationTx), fillorder);
     return {fillorder.creationTx, Res::Ok()};
 }
 
@@ -87,6 +94,9 @@ ResVal<uint256> COrderView::CloseOrder(const COrderView::CCloseOrderImpl& closeo
 {
     if (GetCloseOrderByCreationTx(closeorder.creationTx)) {
         return Res::Err("close with creation tx %s already exists!", closeorder.creationTx.GetHex());
+    }
+    if (!CloseOrderTx(closeorder.orderTx).ok) {
+        return Res::Err("order with creation tx %s doesn't exists!", closeorder.orderTx.GetHex());
     }
     WriteBy<CloseCreationTx>(closeorder.creationTx, closeorder);
 
