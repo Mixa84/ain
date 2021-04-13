@@ -16,6 +16,24 @@ const unsigned char CICXOrderView::ICXClaimDFCHTLCKey           ::prefix = '0';
 const unsigned char CICXOrderView::ICXCloseOrderCreationTx      ::prefix = 'a';
 const unsigned char CICXOrderView::ICXCloseOrderKey             ::prefix = 'b';
 
+const int CICXOrder::DEFAULT_EXPIRY = 2880;
+const int CICXOrder::TYPE_INTERNAL = 1;
+const int CICXOrder::TYPE_EXTERNAL = 0;
+const int CICXOrder::STATUS_OPEN = 0;
+const int CICXOrder::STATUS_CLOSED = 1;
+const int CICXOrder::STATUS_EXPIRED = 2;
+
+const int CICXMakeOffer::STATUS_OPEN = 0;
+
+const int CICXSubmitDFCHTLC::DEFAULT_TIMEOUT = 100;
+const int CICXSubmitDFCHTLC::STATUS_OPEN = 0;
+const int CICXSubmitDFCHTLC::STATUS_CLAIMED = 1;
+const int CICXSubmitDFCHTLC::STATUS_REFUNDED = 2;
+
+const int CICXSubmitEXTHTLC::STATUS_OPEN = 0;
+const int CICXSubmitEXTHTLC::STATUS_EXPIRED = 1;
+
+
 std::unique_ptr<CICXOrderView::CICXOrderImpl> CICXOrderView::GetICXOrderByCreationTx(const uint256 & txid) const
 {
     // auto statusAsset = ReadBy<ICXOrderCreationTx, StatusAsset>(txid);
@@ -42,8 +60,7 @@ ResVal<uint256> CICXOrderView::ICXCreateOrder(const CICXOrderImpl& order)
     OrderKey key({CICXOrder::STATUS_OPEN,pair}, order.creationTx);
     WriteBy<ICXOrderCreationTx>(order.creationTx, order);
     WriteBy<ICXOrderKey>(key, 1);
-    uint8_t status = CICXOrder::STATUS_EXPIRED;
-    WriteBy<ICXOrderStatus>(StatusKey(order.creationHeight+order.expiry,order.creationTx),status);
+    WriteBy<ICXOrderStatus>(StatusKey(order.creationHeight+order.expiry,order.creationTx),CICXOrder::STATUS_EXPIRED);
 
     return {order.creationTx, Res::Ok()};
 }
@@ -136,8 +153,7 @@ ResVal<uint256> CICXOrderView::ICXSubmitDFCHTLC(const CICXSubmitDFCHTLCImpl& sub
 
     WriteBy<ICXSubmitDFCHTLCCreationTx>(submitdfchtlc.creationTx, submitdfchtlc);
     WriteBy<ICXSubmitDFCHTLCKey>(StatusTxidKey({CICXSubmitDFCHTLC::STATUS_OPEN,submitdfchtlc.offerTx},submitdfchtlc.creationTx), 1);
-    uint8_t status = CICXSubmitDFCHTLC::STATUS_REFUNDED;
-    WriteBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight+submitdfchtlc.timeout,submitdfchtlc.creationTx),status);
+    WriteBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight+submitdfchtlc.timeout,submitdfchtlc.creationTx),CICXSubmitDFCHTLC::STATUS_REFUNDED);
 
     return {submitdfchtlc.creationTx, Res::Ok()};
 }
@@ -183,15 +199,16 @@ ResVal<uint256> CICXOrderView::ICXSubmitEXTHTLC(const CICXSubmitEXTHTLCImpl& sub
     }
 
     WriteBy<ICXSubmitEXTHTLCCreationTx>(submitexthtlc.creationTx, submitexthtlc);
+    WriteBy<ICXSubmitEXTHTLCKey>(StatusTxidKey({CICXSubmitEXTHTLC::STATUS_OPEN,submitexthtlc.offerTx}, submitexthtlc.creationTx),1);
     
     return {submitexthtlc.creationTx, Res::Ok()};
 }
 
-void CICXOrderView::ForEachICXSubmitEXTHTLC(std::function<bool (TxidPairKey const &, CLazySerialize<CICXSubmitEXTHTLCImpl>)> callback, uint256 const & txid)
+void CICXOrderView::ForEachICXSubmitEXTHTLC(std::function<bool (StatusTxidKey const &, uint8_t)> callback, StatusTxid const & statustxid)
 {
-    TxidPairKey start(txid,uint256());
-    ForEach<ICXSubmitEXTHTLCCreationTx,TxidPairKey,CICXSubmitEXTHTLCImpl>([&callback] (TxidPairKey const &key, CLazySerialize<CICXSubmitEXTHTLCImpl> submitexthtlc) {
-        return callback(key, submitexthtlc);
+    StatusTxidKey start(statustxid,uint256());
+    ForEach<ICXSubmitEXTHTLCKey,StatusTxidKey,uint8_t>([&callback] (StatusTxidKey const &key, uint8_t i) {
+        return callback(key, i);
     }, start);
 }
 
@@ -203,7 +220,7 @@ std::unique_ptr<CICXOrderView::CICXClaimDFCHTLCImpl> CICXOrderView::GetICXClaimD
     return (nullptr);
 }
 
-ResVal<uint256> CICXOrderView::ICXClaimDFCHTLC(const CICXClaimDFCHTLCImpl& claimdfchtlc)
+ResVal<uint256> CICXOrderView::ICXClaimDFCHTLC(const CICXClaimDFCHTLCImpl& claimdfchtlc, const CICXSubmitDFCHTLCImpl& dfchtlc)
 {
     //this should not happen, but for sure
     if (GetICXClaimDFCHTLCByCreationTx(claimdfchtlc.creationTx)) {
@@ -211,8 +228,9 @@ ResVal<uint256> CICXOrderView::ICXClaimDFCHTLC(const CICXClaimDFCHTLCImpl& claim
     }
 
     WriteBy<ICXClaimDFCHTLCCreationTx>(claimdfchtlc.creationTx, claimdfchtlc);
-    uint8_t status=CICXSubmitDFCHTLC::STATUS_CLAIMED;
-    WriteBy<ICXSubmitDFCHTLCStatus>(StatusKey(claimdfchtlc.creationHeight,claimdfchtlc.dfchtlcTx),status);
+    
+    EraseBy<ICXSubmitDFCHTLCKey>(StatusTxidKey({CICXSubmitDFCHTLC::STATUS_OPEN,dfchtlc.offerTx},dfchtlc.creationTx));
+    WriteBy<ICXSubmitDFCHTLCKey>(StatusTxidKey({CICXSubmitDFCHTLC::STATUS_CLAIMED,dfchtlc.offerTx},dfchtlc.creationTx),1);
     
     return {claimdfchtlc.creationTx, Res::Ok()};
 }
@@ -233,7 +251,7 @@ std::unique_ptr<CICXOrderView::CICXCloseOrderImpl> CICXOrderView::GetICXCloseOrd
     return (nullptr);
 }
 
-ResVal<uint256> CICXOrderView::ICXCloseOrder(const CICXCloseOrderImpl& closeorder, const CICXOrderImpl& order)
+ResVal<uint256> CICXOrderView::ICXCloseOrder(const CICXCloseOrderImpl& closeorder)
 {
     //this should not happen, but for sure
     if (GetICXCloseOrderByCreationTx(closeorder.creationTx)) {

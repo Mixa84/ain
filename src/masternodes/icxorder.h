@@ -13,12 +13,12 @@
 class CICXOrder
 {
 public:
-    static const int DEFAULT_EXPIRY = 2880;
-    static const int TYPE_INTERNAL = 1;
-    static const int TYPE_EXTERNAL = 0;
-    static const int STATUS_OPEN = 0;
-    static const int STATUS_CLOSED = 1;
-    static const int STATUS_EXPIRED = 2;
+    static const int DEFAULT_EXPIRY;
+    static const int TYPE_INTERNAL;
+    static const int TYPE_EXTERNAL;
+    static const int STATUS_OPEN;
+    static const int STATUS_CLOSED;
+    static const int STATUS_EXPIRED;
 
     //! basic properties
     std::string ownerAddress; //address of account asset
@@ -99,7 +99,7 @@ public:
 class CICXMakeOffer
 {
 public:
-    static const int STATUS_OPEN = 0;
+    static const int STATUS_OPEN;
 
     //! basic properties
     uint256 orderTx; // txid for which order is the offer
@@ -156,11 +156,10 @@ public:
 class CICXSubmitDFCHTLC
 {
 public:
-    static const int DEFAULT_TIMEOUT = 100;
-
-    static const int STATUS_OPEN = 0;
-    static const int STATUS_CLAIMED = 1;
-    static const int STATUS_REFUNDED = 2;
+    static const int DEFAULT_TIMEOUT;
+    static const int STATUS_OPEN;
+    static const int STATUS_CLAIMED;
+    static const int STATUS_REFUNDED;
 
     // This tx is acceptance of the offer, HTLC tx and evidence of HTLC on DFC in the same time. It is a CustomTx on DFC chain
     //! basic properties
@@ -224,13 +223,16 @@ public:
 class CICXSubmitEXTHTLC
 {
 public:
+    static const int STATUS_OPEN;
+    static const int STATUS_EXPIRED;
+
     // This tx is acceptance of the offer and evidence of HTLC on external chain in the same time. It is a CustomTx on DFC chain
     //! basic properties
     uint256 offerTx; // txid for which offer is this HTLC
     CAmount amount;
     uint256 hash; 
     std::string htlcscriptAddress;
-    std::string refundPubkey;
+    std::string ownerPubkey;
     uint32_t timeout;
 
     CICXSubmitEXTHTLC()
@@ -238,7 +240,7 @@ public:
         , amount(0)
         , hash()
         , htlcscriptAddress("")
-        , refundPubkey("")
+        , ownerPubkey("")
         , timeout(0)
     {}
     virtual ~CICXSubmitEXTHTLC() = default;
@@ -251,7 +253,7 @@ public:
         READWRITE(amount);
         READWRITE(hash);
         READWRITE(htlcscriptAddress);
-        READWRITE(refundPubkey);
+        READWRITE(ownerPubkey);
         READWRITE(timeout);
     }
 };
@@ -415,16 +417,16 @@ public:
     //SubmitEXTHTLC
     std::unique_ptr<CICXSubmitEXTHTLCImpl> GetICXSubmitEXTHTLCByCreationTx(const uint256 & txid) const;
     ResVal<uint256> ICXSubmitEXTHTLC(const CICXSubmitEXTHTLCImpl& dfchtlc);
-    void ForEachICXSubmitEXTHTLC(std::function<bool (TxidPairKey const &, CLazySerialize<CICXSubmitEXTHTLCImpl>)> callback, uint256 const & offertxid=uint256());
+    void ForEachICXSubmitEXTHTLC(std::function<bool (StatusTxidKey const &, uint8_t)> callback, StatusTxid const & offertxid=StatusTxid());
     
     //ClaimDFCHTLC
     std::unique_ptr<CICXClaimDFCHTLCImpl> GetICXClaimDFCHTLCByCreationTx(const uint256 & txid) const;
-    ResVal<uint256> ICXClaimDFCHTLC(const CICXClaimDFCHTLCImpl& dfchtlc);
+    ResVal<uint256> ICXClaimDFCHTLC(const CICXClaimDFCHTLCImpl& claimdfchtlc, const CICXSubmitDFCHTLCImpl& dfchtlc);
     void ForEachICXClaimDFCHTLC(std::function<bool (TxidPairKey const &, CLazySerialize<CICXClaimDFCHTLCImpl>)> callback, uint256 const & ordertxid=uint256());
 
     //CloseOrder
     std::unique_ptr<CICXCloseOrderImpl> GetICXCloseOrderByCreationTx(const uint256 & txid) const;
-    ResVal<uint256> ICXCloseOrder(const CICXCloseOrderImpl& closeorder, const CICXOrderImpl& order);
+    ResVal<uint256> ICXCloseOrder(const CICXCloseOrderImpl& closeorder);
 
     struct ICXOrderCreationTx { static const unsigned char prefix; };
     struct ICXOrderKey { static const unsigned char prefix; };

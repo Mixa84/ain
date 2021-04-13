@@ -95,6 +95,7 @@ bool HasAuth(CTransaction const & tx, CCoinsViewCache const & coins, CScript con
 {
     for (auto input : tx.vin) {
         const Coin& coin = coins.AccessCoin(input.prevout);
+        std::cout << coin.out.scriptPubKey.GetHex() << "|" << auth.GetHex() << std::endl;
         if (!coin.IsSpent() && coin.out.scriptPubKey == auth)
             return true;
     }
@@ -1698,23 +1699,35 @@ Res ApplyICXSubmitDFCHTLCTx(CCustomCSView & mnview, CCoinsViewCache const & coin
 
     if (submitdfchtlc.hash.IsNull())
         return Res::Err("Invalid hash, htlc hash is empty and it must be set!");
-    
     if (submitdfchtlc.timeout == 0)
         return Res::Err("Invalid timout, must be greater than 0!");
+        
     if (order->orderType == CICXOrder::TYPE_INTERNAL)
     {
         if (submitdfchtlc.amount != offer->amount*order->orderPrice/COIN)
             return Res::Err("amount in dfc htlc must match the amount necessary for offer amount - %f != %f!", ValueFromAmount(submitdfchtlc.amount).getValStr(), ValueFromAmount(offer->amount*order->orderPrice/COIN).getValStr());
 
         bool found=false;
-        mnview.ForEachICXSubmitEXTHTLC([&found,&offer](CICXOrderView::TxidPairKey const & key, CICXSubmitEXTHTLCImplemetation submitexthtlc) {
-            if (key.first == offer->creationTx)
+        mnview.ForEachICXSubmitDFCHTLC([&found,&offer](CICXOrderView::StatusTxidKey const & key, uint8_t i) {
+            std::cout << key.first.second.GetHex() << "|" << key.second.GetHex() << std::endl;
+            if (key.first.second != offer->creationTx) 
+                return true;
+            found=true;
+            return false;
+        },{CICXSubmitDFCHTLC::STATUS_OPEN,submitdfchtlc.offerTx});
+        if (found)
+            return Res::Err("dfc htlc already submitted!");
+
+        found=false;
+
+        mnview.ForEachICXSubmitEXTHTLC([&found,&offer](CICXOrderView::StatusTxidKey const & key, uint8_t i) {
+            if (key.first.second == offer->creationTx)
             {
                 found = true;
                 return (false);
             }
             return true;
-        },order->creationTx);
+        },{CICXSubmitEXTHTLC::STATUS_OPEN,submitdfchtlc.offerTx});
         if (found)
             return Res::Err("offer %s needs to have dfc htlc submitted first, but external htlc already submitted!", offer->creationTx.GetHex());
 
@@ -1726,15 +1739,24 @@ Res ApplyICXSubmitDFCHTLCTx(CCustomCSView & mnview, CCoinsViewCache const & coin
         if (submitdfchtlc.amount != offer->amount)
             return Res::Err("amount in dfc htlc must match the amount in offer - %s != %s!", ValueFromAmount(submitdfchtlc.amount).getValStr(), ValueFromAmount(offer->amount).getValStr());
         
+        
+        bool found=false;
+        mnview.ForEachICXSubmitDFCHTLC([&found](CICXOrderView::StatusTxidKey const & key, uint8_t i) {
+            found=true;
+            return false;
+        },{CICXSubmitDFCHTLC::STATUS_OPEN,submitdfchtlc.offerTx});
+        if (found)
+            return Res::Err("dfc htlc already submitted!");
+
         std::unique_ptr<CICXSubmitEXTHTLCImplemetation> exthtlc;
-        mnview.ForEachICXSubmitEXTHTLC([&exthtlc,&offer](CICXOrderView::TxidPairKey const & key, CICXSubmitEXTHTLCImplemetation submitexthtlc) {
-            if (key.first == offer->creationTx)
+        mnview.ForEachICXSubmitEXTHTLC([&](CICXOrderView::StatusTxidKey const & key, uint8_t i) {
+            if (key.first.second == offer->creationTx)
             {
-                exthtlc = MakeUnique<CICXSubmitEXTHTLCImplemetation>(submitexthtlc);
+                exthtlc = mnview.GetICXSubmitEXTHTLCByCreationTx(key.second);
                 return (false);
             }
             return true;
-        },order->creationTx);
+        },{CICXSubmitEXTHTLC::STATUS_OPEN,submitdfchtlc.offerTx});
         if (!exthtlc)
             return Res::Err("offer %s needs to have ext htlc submitted first, but no external htlc found!", offer->creationTx.GetHex());
         
@@ -1750,7 +1772,7 @@ Res ApplyICXSubmitDFCHTLCTx(CCustomCSView & mnview, CCoinsViewCache const & coin
     if (rpcInfo) {
         rpcInfo->pushKV("creationTx", submitdfchtlc.creationTx.GetHex());
         rpcInfo->pushKV("offerTx", submitdfchtlc.offerTx.GetHex());
-        rpcInfo->pushKV("amount", submitdfchtlc.amount);
+        rpcInfo->pushKV("amount", ValueFromAmount(submitdfchtlc.amount));
         rpcInfo->pushKV("receiverAddress", submitdfchtlc.receiveAddress);
         rpcInfo->pushKV("hash", submitdfchtlc.hash.GetHex());
         rpcInfo->pushKV("timeout", static_cast<int>(submitdfchtlc.timeout));
@@ -1794,14 +1816,30 @@ Res ApplyICXSubmitEXTHTLCTx(CCustomCSView & mnview, CCoinsViewCache const & coin
         return Res::Err("order with creation tx %s does not exists!", offer->orderTx.GetHex());
     }
 
+    if (submitexthtlc.htlcscriptAddress.empty())
+        return Res::Err("Invalid htlcscriptAddress, htlcscriptAddress is empty and it must be set!");
     if (submitexthtlc.hash.IsNull())
         return Res::Err("Invalid hash, htlc hash is empty and it must be set!");
-
+    if (submitexthtlc.ownerPubkey.empty())
+        return Res::Err("Invalid refundPubkey is empty and it must be set!");
+    if (CPubKey(submitexthtlc.ownerPubkey.begin(),submitexthtlc.ownerPubkey.end()).IsFullyValid())
+        return Res::Err("Invalid refundPubkey is not a valid pubkey!");
+    if (submitexthtlc.timeout == 0)
+        return Res::Err("Invalid timout, must be greater than 0!");
+    
     if (order->orderType==CICXOrder::TYPE_INTERNAL)
     {
         if (submitexthtlc.amount != offer->amount)
-            return Res::Err("amount in ext htlc must match the amount in the offer - %s != %s!", ValueFromAmount(submitexthtlc.amount).getValStr(), ValueFromAmount(offer->amount*COIN/order->orderPrice).getValStr());
+            return Res::Err("amount in ext htlc must match the amount in the offer - %s != %s!", ValueFromAmount(submitexthtlc.amount).getValStr(), ValueFromAmount(offer->amount).getValStr());
         
+        bool found=false;
+        mnview.ForEachICXSubmitEXTHTLC([&found](CICXOrderView::StatusTxidKey const & key, uint8_t i) {
+            found=true;
+            return false;
+        },{CICXSubmitDFCHTLC::STATUS_OPEN,submitexthtlc.offerTx});
+        if (found)
+            return Res::Err("ext htlc already submitted!");
+
         std::unique_ptr<CICXSubmitDFCHTLCImplemetation> dfchtlc;
         mnview.ForEachICXSubmitDFCHTLC([&](CICXOrderView::StatusTxidKey const & key, uint8_t) {
             if (key.first.second == offer->creationTx)
@@ -1810,7 +1848,7 @@ Res ApplyICXSubmitEXTHTLCTx(CCustomCSView & mnview, CCoinsViewCache const & coin
                 return (false);
             }
             return true;
-        },{CICXSubmitDFCHTLC::STATUS_OPEN,order->creationTx});
+        },{CICXSubmitDFCHTLC::STATUS_OPEN,offer->creationTx});
         if (!dfchtlc)
             return Res::Err("offer %s needs to have dfc htlc submitted first, but no dfc htlc found!", offer->creationTx.GetHex());
 
@@ -1823,34 +1861,34 @@ Res ApplyICXSubmitEXTHTLCTx(CCustomCSView & mnview, CCoinsViewCache const & coin
             return Res::Err("amount in dfc htlc must match the amount necessary for offer amount - %s != %s!", ValueFromAmount(submitexthtlc.amount).getValStr(), ValueFromAmount(offer->amount*order->orderPrice/COIN).getValStr());
 
         bool found=false;
-        mnview.ForEachICXSubmitDFCHTLC([&](CICXOrderView::StatusTxidKey const & key, uint8_t) {
+        mnview.ForEachICXSubmitEXTHTLC([&found](CICXOrderView::StatusTxidKey const & key, uint8_t i) {
+            found=true;
+            return false;
+        },{CICXSubmitDFCHTLC::STATUS_OPEN,submitexthtlc.offerTx});
+        if (found)
+            return Res::Err("ext htlc already submitted!");
+
+        found=false;
+        mnview.ForEachICXSubmitDFCHTLC([&found,&offer](CICXOrderView::StatusTxidKey const & key, uint8_t) {
             if (key.first.second == offer->creationTx)
             {
                 found = true;
                 return (false);
             }
             return true;
-        },{CICXSubmitDFCHTLC::STATUS_OPEN,order->creationTx});
+        },{CICXSubmitDFCHTLC::STATUS_OPEN,offer->creationTx});
         if (found)
             return Res::Err("offer %s needs to have dfc htlc submitted first, but external htlc already submitted!", offer->creationTx.GetHex());
     }
-
-    if (submitexthtlc.htlcscriptAddress.empty())
-        return Res::Err("Invalid htlcscriptAddress, htlcscriptAddress is empty and it must be set!");
-    if (submitexthtlc.refundPubkey.empty())
-        return Res::Err("Invalid refundPubkey is empty and it must be set!");
-    if (CPubKey(submitexthtlc.refundPubkey.begin(),submitexthtlc.refundPubkey.end()).IsFullyValid())
-        return Res::Err("Invalid refundPubkey is not a valid pubkey!");
-    if (submitexthtlc.timeout == 0)
-        return Res::Err("Invalid timout, must be greater than 0!");
 
     // Return here to avoid balance problems
     if (rpcInfo) {
         rpcInfo->pushKV("creationTx", submitexthtlc.creationTx.GetHex());
         rpcInfo->pushKV("offerTx", submitexthtlc.offerTx.GetHex());
+        rpcInfo->pushKV("amount", ValueFromAmount(submitexthtlc.amount));
         rpcInfo->pushKV("hash", submitexthtlc.hash.GetHex());
         rpcInfo->pushKV("htlcscriptAddress", submitexthtlc.htlcscriptAddress);
-        rpcInfo->pushKV("ownerPubkey", submitexthtlc.refundPubkey);
+        rpcInfo->pushKV("ownerPubkey", submitexthtlc.ownerPubkey);
         rpcInfo->pushKV("timeout", static_cast<int>(submitexthtlc.timeout));
         return Res::Ok();
     }
@@ -1929,13 +1967,13 @@ Res ApplyICXClaimDFCHTLCTx(CCustomCSView & mnview, CCoinsViewCache const & coins
         ownerAddress = dfchtlc->receiveAddress;
     }
     
-    auto res = mnview.ICXClaimDFCHTLC(claimdfchtlc);
+    auto res = mnview.ICXClaimDFCHTLC(claimdfchtlc,*dfchtlc);
     if (!res.ok) {
         return Res::Err("%s %s: %s", __func__, claimdfchtlc.creationTx.GetHex(), res.msg);
     }
-    res = mnview.AddBalance(GetScriptForDestination(DecodeDestination(ownerAddress)),amount);
-    if (!res.ok) {
-        return Res::Err("%s: %s", __func__, res.msg);
+    auto res1 = mnview.AddBalance(GetScriptForDestination(DecodeDestination(ownerAddress)),amount);
+    if (!res1.ok) {
+        return Res::Err("%s: %s", __func__, res1.msg);
     }
     return Res::Ok();
 }
@@ -1969,6 +2007,7 @@ Res ApplyICXCloseOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, 
 
     const Coin& auth = coins.AccessCoin(COutPoint(order->creationTx, 1)); // always n=1 output
     // check auth
+    std::cout << auth.out.scriptPubKey.GetHex() << std::endl;
     if (!skipAuth && !HasAuth(tx, coins, auth.out.scriptPubKey)) {
         return Res::Err("%s: %s", __func__, "tx must have at least one input from order owner");
     }
@@ -1992,7 +2031,7 @@ Res ApplyICXCloseOrderTx(CCustomCSView & mnview, CCoinsViewCache const & coins, 
         }
     }
 
-    auto res = mnview.ICXCloseOrder(closeorder,*order);
+    auto res = mnview.ICXCloseOrder(closeorder);
     if (!res.ok) {
         return Res::Err("%s %s: %s", __func__, closeorder.creationTx.GetHex(), res.msg);
     }
