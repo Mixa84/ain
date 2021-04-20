@@ -6,19 +6,19 @@ UniValue icxOrderToJSON(CICXOrderImplemetation const& order) {
 
     if (order.orderType)
     {
-        auto tokenFrom = pcustomcsview->GetToken(order.idTokenFrom);
+        auto tokenFrom = pcustomcsview->GetToken(order.idToken);
         if (!tokenFrom)
             return (ret);
-        orderObj.pushKV("tokenFrom", tokenFrom->CreateSymbolKey(order.idTokenFrom));
-        orderObj.pushKV("chainTo",order.chainTo);
+        orderObj.pushKV("tokenFrom", tokenFrom->CreateSymbolKey(order.idToken));
+        orderObj.pushKV("chainTo",order.chain);
     }
     else
     {
-        auto tokenTo = pcustomcsview->GetToken(order.idTokenTo);
+        auto tokenTo = pcustomcsview->GetToken(order.idToken);
         if (!tokenTo)
             return (ret);
-        orderObj.pushKV("chainFrom",order.chainFrom);
-        orderObj.pushKV("tokenTo", tokenTo->CreateSymbolKey(order.idTokenTo));
+        orderObj.pushKV("chainFrom",order.chain);
+        orderObj.pushKV("tokenTo", tokenTo->CreateSymbolKey(order.idToken));
     }
     orderObj.pushKV("amountFrom", ValueFromAmount(order.amountFrom));
     orderObj.pushKV("amountToFill", ValueFromAmount(order.amountToFill));
@@ -43,8 +43,10 @@ UniValue icxMakeOfferToJSON(CICXMakeOfferImplemetation const& makeoffer) {
     UniValue orderObj(UniValue::VOBJ);
     orderObj.pushKV("orderTx", makeoffer.orderTx.GetHex());
     orderObj.pushKV("amount", ValueFromAmount(makeoffer.amount));
-    orderObj.pushKV("receiveAddress", makeoffer.receiveAddress);
-
+    if (!CPubKey(makeoffer.receiveDestination).IsFullyValid())
+        orderObj.pushKV("receivePubkey", HexStr(makeoffer.receiveDestination));
+    else if (!ScriptToString(CScript(makeoffer.receiveDestination.begin(),makeoffer.receiveDestination.end())).empty())
+        orderObj.pushKV("receiveAddress", ScriptToString(CScript(makeoffer.receiveDestination.begin(),makeoffer.receiveDestination.end())));
     UniValue ret(UniValue::VOBJ);
     ret.pushKV(makeoffer.creationTx.GetHex(), orderObj);
     return ret;
@@ -56,8 +58,6 @@ UniValue icxSubmitDFCHTLCToJSON(CICXSubmitDFCHTLCImplemetation const& dfchtlc) {
     orderObj.pushKV("offerTx", dfchtlc.offerTx.GetHex());
     orderObj.pushKV("amount", ValueFromAmount(dfchtlc.amount));
     orderObj.pushKV("hash", dfchtlc.hash.GetHex());
-    if (!dfchtlc.receiveAddress.empty()) orderObj.pushKV("receiveAddress", dfchtlc.receiveAddress);
-    if (!dfchtlc.receivePubKey.empty())orderObj.pushKV("receivePubkey", dfchtlc.receivePubKey);
     orderObj.pushKV("timeout", static_cast<int>(dfchtlc.timeout));
     orderObj.pushKV("height", static_cast<int>(dfchtlc.creationHeight));
     orderObj.pushKV("expireHeight", static_cast<int>(dfchtlc.expireHeight));
@@ -74,7 +74,7 @@ UniValue icxSubmitEXTHTLCToJSON(CICXSubmitEXTHTLCImplemetation const& exthtlc) {
     orderObj.pushKV("amount", ValueFromAmount(exthtlc.amount));
     orderObj.pushKV("htlcscriptAddress", exthtlc.htlcscriptAddress);
     orderObj.pushKV("hash", exthtlc.hash.GetHex());
-    orderObj.pushKV("ownerPubkey", exthtlc.ownerPubkey);
+    orderObj.pushKV("ownerPubkey", HexStr(exthtlc.ownerPubkey));
     orderObj.pushKV("externalTimeout", static_cast<int>(exthtlc.timeout));
     orderObj.pushKV("height", static_cast<int>(exthtlc.creationHeight));
 
@@ -92,10 +92,8 @@ UniValue icxcreateorder(const JSONRPCRequest& request) {
                 {
                     {"order", RPCArg::Type::OBJ, RPCArg::Optional::NO, "",
                         {
-                            {"tokenFrom", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Symbol or id of selling token"},
-                            {"chainFrom", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Symbol of chain for selling asset"},
-                            {"tokenTo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Symbol or id of buying token"},
-                            {"chainTo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Symbol of chain for buying asset"},
+                            {"tokenFrom|chainFrom", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Symbol or id of selling token/chain"},
+                            {"chainTo|tokenTo", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Symbol or id of buying chain/token"},
                             {"ownerAddress", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Address of tokens when using tokenFrom"},
                             {"amountFrom", RPCArg::Type::NUM, RPCArg::Optional::NO, "tokenFrom coins amount"},
                             {"orderPrice", RPCArg::Type::NUM, RPCArg::Optional::NO, "Price per unit"},
@@ -118,7 +116,7 @@ UniValue icxcreateorder(const JSONRPCRequest& request) {
                         "\"hash\"                  (string) The hex-encoded hash of broadcasted transaction\n"
                 },
                 RPCExamples{
-                        HelpExampleCli("-cx_createorder", "'{\"ownerAddress\":\"tokenAddress\","
+                        HelpExampleCli("icx_createorder", "'{\"ownerAddress\":\"tokenAddress\","
                                                         "\"tokenFrom\":\"MyToken1\",\"chainTo\":\"BTC\","
                                                         "\"amountFrom\":\"10\",\"orderPrice\":\"0.02\"}'")
                         + HelpExampleCli("icx_createorder", "'{\"chainFrom\":\"BTC\",\"tokenTo\":\"MyToken2\","
@@ -148,15 +146,19 @@ UniValue icxcreateorder(const JSONRPCRequest& request) {
     if (!metaObj["tokenFrom"].isNull()) {
         tokenFromSymbol = trim_ws(metaObj["tokenFrom"].getValStr());
 
-        if (!metaObj["chainTo"].isNull()) order.chainTo = trim_ws(metaObj["chainTo"].getValStr());
+        if (!metaObj["chainTo"].isNull()) order.chain = trim_ws(metaObj["chainTo"].getValStr());
         else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"chainTo\" must be non-null if \"tokenFrom\" specified");
 
-        if (!metaObj["ownerAddress"].isNull()) order.ownerAddress = trim_ws(metaObj["ownerAddress"].getValStr());
+        if (!metaObj["ownerAddress"].isNull()) order.ownerAddress = DecodeScript(metaObj["ownerAddress"].getValStr());
         else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"ownerAddress\" must be non-null if \"tokenFrom\" specified");
-    
+       
+        if (!::IsMine(*pwallet, DecodeDestination(metaObj["ownerAddress"].getValStr()))) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Address (%s) is not owned by the wallet", metaObj["ownerAddress"].getValStr()));
+        }
+
     }
     else if (!metaObj["chainFrom"].isNull()) {
-        order.chainFrom = trim_ws(metaObj["chainFrom"].getValStr());
+        order.chain = trim_ws(metaObj["chainFrom"].getValStr());
 
         if (!metaObj["tokenTo"].isNull()) tokenToSymbol = trim_ws(metaObj["tokenTo"].getValStr());
         else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"tokenTo\" must be non-null if \"chainFrom\" specified");
@@ -174,12 +176,10 @@ UniValue icxcreateorder(const JSONRPCRequest& request) {
     
     if (!metaObj["expiry"].isNull()) order.expiry = metaObj["expiry"].get_int();
 
-    if (tokenFromSymbol.empty() && order.chainFrom.empty())
+    if (tokenFromSymbol.empty() && order.chain.empty())
         throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, either \"tokenFrom\" or \"chainFrom\" must be non-null. [tokenFrom,chainTo] or [chainFrom,tokenTo]");
-    if (!tokenFromSymbol.empty() && !order.chainFrom.empty())
-        throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, \"tokenFrom\" and \"chainFrom\" cannot be set in the same time. [tokenFrom,chainTo] or [chainFrom,tokenTo]");
-    if (!tokenToSymbol.empty() && !order.chainTo.empty())
-        throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, \"tokenTo\" and \"chainTo\" cannot be set in the same time. [tokenFrom,chainTo] or [chainFrom,tokenTo]");
+    if (!tokenFromSymbol.empty() && !tokenToSymbol.empty())
+        throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, \"tokenFrom\" and \"tokenTo\" cannot be set in the same time. [tokenFrom,chainTo] or [chainFrom,tokenTo]");
     
     if (!tokenFromSymbol.empty()) order.orderType = CICXOrder::TYPE_INTERNAL;
     else order.orderType = CICXOrder::TYPE_EXTERNAL;
@@ -187,16 +187,16 @@ UniValue icxcreateorder(const JSONRPCRequest& request) {
     int targetHeight;
     {
         LOCK(cs_main);
-        DCT_ID idTokenFrom, idTokenTo;
-        std::unique_ptr<CToken> tokenFrom, tokenTo;
+        DCT_ID idToken;
+        std::unique_ptr<CToken> token;
 
         if (order.orderType == CICXOrder::TYPE_INTERNAL)
         {
-            tokenFrom = pcustomcsview->GetTokenGuessId(tokenFromSymbol, idTokenFrom);
-            if (!tokenFrom) {
+            token = pcustomcsview->GetTokenGuessId(tokenFromSymbol, idToken);
+            if (!token) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenFromSymbol));
             }
-            order.idTokenFrom = idTokenFrom;
+            order.idToken = idToken;
 
             CBalances totalBalances;
             CAmount total = 0;
@@ -209,18 +209,18 @@ UniValue icxcreateorder(const JSONRPCRequest& request) {
             auto it = totalBalances.balances.begin();
             for (int i = 0; it != totalBalances.balances.end(); it++, i++) {
                 CTokenAmount bal = CTokenAmount{(*it).first, (*it).second};
-                if (bal.nTokenId == order.idTokenFrom) total += bal.nValue;
+                if (bal.nTokenId == order.idToken) total += bal.nValue;
             }
             if (total < order.amountFrom)
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s for order amount %s!", tokenFrom->CreateSymbolKey(order.idTokenFrom), ValueFromAmount(order.amountFrom).getValStr()));
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s for order amount %s!", token->CreateSymbolKey(order.idToken), ValueFromAmount(order.amountFrom).getValStr()));
         }
         else
         {
-            tokenTo = pcustomcsview->GetTokenGuessId(tokenToSymbol, idTokenTo);
-            if (!tokenTo) {
+            token = pcustomcsview->GetTokenGuessId(tokenToSymbol, idToken);
+            if (!token) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenToSymbol));
             }
-            order.idTokenTo = idTokenTo;
+            order.idToken = idToken;
         }
 
         targetHeight = ::ChainActive().Height() + 1;
@@ -282,7 +282,7 @@ UniValue icxmakeoffer(const JSONRPCRequest& request) {
                         {
                             {"orderTx", RPCArg::Type::STR, RPCArg::Optional::NO, "txid of order tx for which is the offer"},
                             {"amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "amount fulfilling the order"},
-                            {"receiveAddres", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "address for receiving DFC tokens in case of EXT/DFC order type"},
+                            {"receiveAddress", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "address for receiving DFC tokens in case of EXT/DFC order type"},
                             {"receivePubkey", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "pubkey which can claim external HTLC in case of DFC/EXT order type"},
                         },
                     },
@@ -346,14 +346,19 @@ UniValue icxmakeoffer(const JSONRPCRequest& request) {
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
             if (!metaObj["receiveAddress"].isNull()) {
-                makeoffer.receiveAddress = trim_ws(metaObj["receiveAddress"].getValStr());
+                CScript dest=DecodeScript(metaObj["receiveAddress"].getValStr());
+                makeoffer.receiveDestination = std::vector<uint8_t>(dest.begin(),dest.end());
             }
             else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"receiveAddress\" must be non-null");
+            
+            if (!::IsMine(*pwallet, DecodeDestination(metaObj["receiveAddress"].getValStr()))) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Address (%s) is not owned by the wallet", metaObj["receiveAddress"].getValStr()));
+            }
         }
         else
         {
             if (!metaObj["receivePubkey"].isNull()) {
-                makeoffer.receivePubkey = trim_ws(metaObj["receivePubkey"].getValStr());
+                makeoffer.receiveDestination = ParseHex(trim_ws(metaObj["receivePubkey"].getValStr()));
             }
             else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"receivePubKey\" must be non-null");
         }
@@ -416,7 +421,7 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
                         {
                             {"offerTx", RPCArg::Type::STR, RPCArg::Optional::NO, "txid of offer tx for which the htlc is"},
                             {"amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "amount in htlc"},
-                            {"receiveAddres", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "address for receiving DFC tokens in case of EXT/DFC order type"},
+                            {"receiveAddress", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "address for receiving DFC tokens in case of EXT/DFC order type"},
                             {"receivePubkey", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "pubkey which can claim external HTLC in case of DFC/EXT order type"},
                             {"hash", RPCArg::Type::STR, RPCArg::Optional::NO, "hash of seed used for the hash lock part"},
                             {"timeout", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "timeout (absolute in block) for expiration of htlc"},
@@ -486,23 +491,20 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
         if (!order)
             throw JSONRPCError(RPC_INVALID_PARAMETER, "orderTx (" + offer->orderTx.GetHex() + ") does not exist");
 
-        DCT_ID idToken;
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
-            idToken = order->idTokenFrom;
             if (!metaObj["receivePubkey"].isNull()) {
-                submitdfchtlc.receivePubKey = trim_ws(metaObj["receivePubkey"].getValStr());
+                submitdfchtlc.receiveDestination = ParseHex(trim_ws(metaObj["receivePubkey"].getValStr()));
             }
-            else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"receivePubkey\" must be non-null");
+            else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"receivePubKey\" must be non-null or invalid pubkey");
         }
         else
         {
-            idToken = order->idTokenTo;
             if (!metaObj["receiveAddress"].isNull()) {
-                submitdfchtlc.receiveAddress = trim_ws(metaObj["receiveAddress"].getValStr());
+                CScript dest=DecodeScript(metaObj["receiveAddress"].getValStr());
+                submitdfchtlc.receiveDestination = std::vector<uint8_t>(dest.begin(),dest.end());
             }
             else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"receiveAddress\" must be non-null");
- 
         }
 
         targetHeight = ::ChainActive().Height() + 1;
@@ -625,7 +627,7 @@ UniValue icxsubmitexthtlc(const JSONRPCRequest& request) {
     }
     else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"htlcScriptAddress\" must be non-null");
     if (!metaObj["ownerPubkey"].isNull()) {
-        submitexthtlc.ownerPubkey = trim_ws(metaObj["ownerPubkey"].getValStr());
+        submitexthtlc.ownerPubkey = PublickeyFromString(metaObj["ownerPubkey"].getValStr());
     }
     else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"ownerPubkey\" must be non-null");
     if (!metaObj["timeout"].isNull()) {
@@ -705,7 +707,6 @@ UniValue icxclaimdfchtlc(const JSONRPCRequest& request) {
                     {"htlc", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
                         {
                             {"dfchtlcTx", RPCArg::Type::STR, RPCArg::Optional::NO, "txid of dfc htlc tx for which the claim is"},
-                            {"amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "amount in htlc"},
                             {"seed", RPCArg::Type::STR, RPCArg::Optional::NO, "secret seed for claiming htlc"},
                         },
                     },
@@ -726,7 +727,7 @@ UniValue icxclaimdfchtlc(const JSONRPCRequest& request) {
                 },
                 RPCExamples{
                         HelpExampleCli("icx_claimdfchtlc", "'{\"dfchtlcTx\":\"tokenAddress\","
-                                                        "\"amount\":\"10\",\"hash\":\"\"}'")
+                                                        "\"hash\":\"\"}'")
                 },
      }.Check(request);
 
@@ -740,7 +741,7 @@ UniValue icxclaimdfchtlc(const JSONRPCRequest& request) {
     if (request.params[0].isNull()) {
         throw JSONRPCError(RPC_INVALID_PARAMETER,
                            "Invalid parameters, arguments 1 must be non-null and expected as object at least with "
-                           "{\"dfchtlcTx\",\"amount\",\"receiverAddress\",\"seed\"}");
+                           "{\"dfchtlcTx\",\"receiverAddress\",\"seed\"}");
     }
     UniValue metaObj = request.params[0].get_obj();
     UniValue const & txInputs = request.params[1];
@@ -751,10 +752,6 @@ UniValue icxclaimdfchtlc(const JSONRPCRequest& request) {
         claimdfchtlc.dfchtlcTx = uint256S(metaObj["dfchtlcTx"].getValStr());
     }
     else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"dfchtlcTx\" must be non-null");
-    if (!metaObj["amount"].isNull()) {
-        claimdfchtlc.amount = AmountFromValue(metaObj["amount"]);
-    }
-    else throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"amount\" must be non-null");
     if (!metaObj["seed"].isNull()) {
         claimdfchtlc.seed = ParseHex(metaObj["seed"].getValStr());
     }
@@ -766,10 +763,6 @@ UniValue icxclaimdfchtlc(const JSONRPCRequest& request) {
         auto dfchtlc = pcustomcsview->GetICXSubmitDFCHTLCByCreationTx(claimdfchtlc.dfchtlcTx);
         if (!dfchtlc)
             throw JSONRPCError(RPC_INVALID_PARAMETER, "offerTx (" + claimdfchtlc.dfchtlcTx.GetHex() + ") does not exist");
-
-        if (claimdfchtlc.amount!=dfchtlc->amount) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "amount in claim different than in dfc htlc: " + ValueFromAmount(claimdfchtlc.amount).getValStr() + " - " + ValueFromAmount(dfchtlc->amount).getValStr());
-        }
 
         std::vector<unsigned char> calcSeedBytes(32);
         uint256 calcHash;

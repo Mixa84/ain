@@ -2422,18 +2422,17 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                     return (false);
 
                 CTokenAmount amount;
-                std::string ownerAddress;
+                CScript ownerAddress;
+                amount = {order->idToken,dfchtlc->amount};
                 if (order->orderType == CICXOrder::TYPE_INTERNAL)
                 {
-                    amount = {order->idTokenFrom,dfchtlc->amount};
                     ownerAddress = order->ownerAddress;
                 }
                 else
                 {
-                    amount = {order->idTokenTo,dfchtlc->amount};
-                    ownerAddress = offer->ownerAddress;
+                    ownerAddress = CScript(offer->receiveDestination.begin(),offer->receiveDestination.end());
                 }
-                auto res = mnview.AddBalance(GetScriptForDestination(DecodeDestination(ownerAddress)),amount);
+                auto res = mnview.AddBalance(ownerAddress,amount);
                 if (res.ok) 
                     mnview.ICXRefundDFCHTLC(*dfchtlc);
 
