@@ -89,6 +89,8 @@ struct Params {
     int EunosHeight;
     /** Foundation share after AMK, normalized to COIN = 100% */
     CAmount foundationShareDFIP1;
+    /** Trackable burn address */
+    CScript burnAddress;
 
     /** Struct to hold percentages for coinbase distribution.
      *  Percentages are calculated out of 10000 */
