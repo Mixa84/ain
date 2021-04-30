@@ -63,6 +63,7 @@ UniValue icxMakeOfferToJSON(CICXMakeOfferImplemetation const& makeoffer, uint8_t
         orderObj.pushKV("receivePubkey", HexStr(makeoffer.receiveDestination));
     else if (!ScriptToString(CScript(makeoffer.receiveDestination.begin(),makeoffer.receiveDestination.end())).empty())
         orderObj.pushKV("receiveAddress", ScriptToString(CScript(makeoffer.receiveDestination.begin(),makeoffer.receiveDestination.end())));
+    orderObj.pushKV("takerFee", ValueFromAmount(makeoffer.takerFee));
     orderObj.pushKV("expireHeight", static_cast<int>(makeoffer.creationHeight + makeoffer.expiry));
     
     UniValue ret(UniValue::VOBJ);
@@ -95,9 +96,9 @@ UniValue icxSubmitEXTHTLCToJSON(CICXSubmitEXTHTLCImplemetation const& exthtlc) {
     orderObj.pushKV("offerTx", exthtlc.offerTx.GetHex());
     orderObj.pushKV("amount", ValueFromAmount(exthtlc.amount));
     if (!exthtlc.receiveAddress.empty())
-        orderObj.pushKV("ownerAddress",ScriptToString(exthtlc.receiveAddress));
-    orderObj.pushKV("htlcscriptAddress", exthtlc.htlcscriptAddress);
+        orderObj.pushKV("receiveAddress",ScriptToString(exthtlc.receiveAddress));
     orderObj.pushKV("hash", exthtlc.hash.GetHex());
+    orderObj.pushKV("htlcscriptAddress", exthtlc.htlcscriptAddress);
     orderObj.pushKV("ownerPubkey", HexStr(exthtlc.ownerPubkey));
     orderObj.pushKV("externalTimeout", static_cast<int>(exthtlc.timeout));
     orderObj.pushKV("height", static_cast<int>(exthtlc.creationHeight));
@@ -239,21 +240,9 @@ UniValue icxcreateorder(const JSONRPCRequest& request) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenFromSymbol));
             order.idToken = idToken;
 
-            CBalances totalBalances;
-            CAmount total = 0;
-            pcustomcsview->ForEachBalance([&](CScript const & owner, CTokenAmount const & balance) {
-                if (IsMineCached(*pwallet, owner) == ISMINE_SPENDABLE)
-                    totalBalances.Add(balance);
-                return true;
-            });
-            auto it = totalBalances.balances.begin();
-            for (int i = 0; it != totalBalances.balances.end(); it++, i++)
-            {
-                CTokenAmount bal = CTokenAmount{(*it).first, (*it).second};
-                if (bal.nTokenId == order.idToken) total += bal.nValue;
-            }
-            if (total < order.amountFrom)
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s for order amount %s!", token->CreateSymbolKey(order.idToken), ValueFromAmount(order.amountFrom).getValStr()));
+            CTokenAmount balance = pcustomcsview->GetBalance(order.ownerAddress,idToken);
+            if (balance.nValue < order.amountFrom)
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s on address %s!", token->CreateSymbolKey(order.idToken), ScriptToString(order.ownerAddress)));
         }
         else
         {
@@ -403,6 +392,12 @@ UniValue icxmakeoffer(const JSONRPCRequest& request) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"ownerAddress\" must be non-null");
             if (!::IsMine(*pwallet, DecodeDestination(metaObj["ownerAddress"].getValStr())))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Address (%s) is not owned by the wallet", metaObj["ownerAddress"].getValStr()));
+            
+            CTokenAmount balance = pcustomcsview->GetBalance(makeoffer.ownerAddress,order->idToken);
+            if (balance.nValue < makeoffer.amount)
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s on address %s!", 
+                        pcustomcsview->GetToken(order->idToken)->CreateSymbolKey(order->idToken), ScriptToString(makeoffer.ownerAddress)));
+            
             if (!metaObj["receivePubkey"].isNull())
                 makeoffer.receiveDestination = ParseHex(trim_ws(metaObj["receivePubkey"].getValStr()));
             else
@@ -1304,6 +1299,7 @@ UniValue icxlistorders(const JSONRPCRequest& request) {
         else
         {
             pcustomcsview->ForEachICXMakeOfferOpen([&](CICXOrderView::TxidPairKey const & key, uint8_t status) {
+                std::cout << key.first.GetHex() << "|" << key.second.GetHex();
                 if (key.first != orderTxid)
                     return (false);
                 auto offer = pcustomcsview->GetICXMakeOfferByCreationTx(key.second);

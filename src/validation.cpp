@@ -2508,15 +2508,13 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                     CTokenAmount amount({order->idToken,order->amountFrom});
                         CScript txidaddr = CScript(order->creationTx.begin(),order->creationTx.end());
                         auto res = cache.SubBalance(txidaddr,amount);
-                        if (!res) {
+                        if (!res)
                             LogPrintf("Can't subtract balance from order txidaddr: %s\n", res.msg);
-                        }
                         if (res.ok)
                         {
                             res = cache.AddBalance(order->ownerAddress,amount);
-                            if (!res) {
+                            if (!res)
                                 LogPrintf("Can't add balance back to owner: %s\n", res.msg);
-                            }
                         }
                     }
 
@@ -2563,7 +2561,6 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                         if (!res)
                             LogPrintf("Can't refund takerFee back to owner: %s\n", res.msg);
                     }                
-
                     if (res.ok)
                     {
                         res = cache.ICXCloseMakeOfferTx(*offer,status);
@@ -2579,13 +2576,13 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
 
                 auto dfchtlc = cache.GetICXSubmitDFCHTLCByCreationTx(key.second);
                 if (!dfchtlc)
-                    return (false);
+                    return true;
                 auto offer = cache.GetICXMakeOfferByCreationTx(dfchtlc->offerTx);
                 if (!offer)
-                    return (false);
+                    return true;
                 auto order = cache.GetICXOrderByCreationTx(offer->orderTx);
                 if (!order)
-                    return (false);
+                    return true;
 
                 CTokenAmount amount;
                 CScript ownerAddress;
@@ -2605,14 +2602,13 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                     if (!res)
                         LogPrintf("Can't add balance back to owner: %s\n", res.msg);
                 }
-
                 if (res.ok)
                 {
                     res = cache.ICXRefundDFCHTLC(*dfchtlc);
                     if (!res)
                         LogPrintf("Can't refund DFC HTLC: %s\n", res.msg);
                 }
-                return (true);
+                return true;
             },pindex->nHeight);
         }
 

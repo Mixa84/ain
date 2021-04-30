@@ -23,6 +23,7 @@ public:
     static const uint8_t STATUS_EXPIRED;
     static const uint8_t DFI_TOKEN_ID;
     static const std::string CHAIN_BTC;
+    static const std::string TOKEN_BTC;
 
     //! basic properties
     uint8_t orderType; //is maker buying or selling DFC asset to know which htlc to come first
@@ -110,6 +111,8 @@ public:
     static const uint8_t STATUS_OPEN;
     static const uint8_t STATUS_CLOSED;
     static const uint8_t STATUS_EXPIRED;
+    static const uint8_t MAINNET_DFI_BTC_POOL_PAIR_ID;
+    static const uint8_t TESTNET_DFI_BTC_POOL_PAIR_ID;
     static const int64_t TAKER_FEE_PER_BTC;
 
     //! basic properties
@@ -126,6 +129,7 @@ public:
         , receiveDestination()
         , ownerAddress()
         , expiry(DEFAULT_EXPIRY)
+        , takerFee(0)
     {}
 
     virtual ~CICXMakeOffer() = default;
@@ -139,6 +143,7 @@ public:
         READWRITE(receiveDestination);
         READWRITE(ownerAddress);
         READWRITE(expiry);
+        READWRITE(takerFee);
     }
 };
 

@@ -31,11 +31,14 @@ const uint8_t CICXOrder::STATUS_FILLED = 2;
 const uint8_t CICXOrder::STATUS_EXPIRED = 3;
 const uint8_t CICXOrder::DFI_TOKEN_ID = 0;
 const std::string CICXOrder::CHAIN_BTC = "BTC";
+const std::string CICXOrder::TOKEN_BTC = "BTC";
 
 const uint32_t CICXMakeOffer::DEFAULT_EXPIRY = 100;
 const uint8_t CICXMakeOffer::STATUS_OPEN = 0;
 const uint8_t CICXMakeOffer::STATUS_CLOSED = 1;
 const uint8_t CICXMakeOffer::STATUS_EXPIRED = 2;
+const uint8_t CICXMakeOffer::MAINNET_DFI_BTC_POOL_PAIR_ID = 5;
+const uint8_t CICXMakeOffer::TESTNET_DFI_BTC_POOL_PAIR_ID = 2;
 const int64_t CICXMakeOffer::TAKER_FEE_PER_BTC = 0.1;
 
 const uint32_t CICXSubmitDFCHTLC::DEFAULT_TIMEOUT = 100;
@@ -94,25 +97,19 @@ Res CICXOrderView::ICXCloseOrderTx(CICXOrderImpl const & order, uint8_t const st
 void CICXOrderView::ForEachICXOrderOpen(std::function<bool (OrderKey const &, uint8_t)> callback, AssetPair const & pair)
 {
     OrderKey start(pair, uint256());
-    ForEach<ICXOrderOpenKey,OrderKey,uint8_t>([&start, &callback] (OrderKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXOrderOpenKey,OrderKey,uint8_t>(callback, start);
 }
 
 void CICXOrderView::ForEachICXOrderClose(std::function<bool (OrderKey const &, uint8_t)> callback, AssetPair const & pair)
 {
     OrderKey start(pair, uint256());
-    ForEach<ICXOrderCloseKey,OrderKey,uint8_t>([&start, &callback] (OrderKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXOrderCloseKey,OrderKey,uint8_t>(callback, start);
 }
 
 void CICXOrderView::ForEachICXOrderExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height)
 {
     StatusKey start(height, uint256());
-    ForEach<ICXOrderStatus,StatusKey,uint8_t>([&start, &callback] (StatusKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXOrderStatus,StatusKey,uint8_t>(callback, start);
 }
 
 std::unique_ptr<CICXOrderView::CICXMakeOfferImpl> CICXOrderView::GetICXMakeOfferByCreationTx(uint256 const & txid) const
@@ -149,25 +146,19 @@ Res CICXOrderView::ICXCloseMakeOfferTx(CICXMakeOfferImpl const & makeoffer, uint
 void CICXOrderView::ForEachICXMakeOfferOpen(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & txid)
 {
     TxidPairKey start(txid, uint256());
-    ForEach<ICXMakeOfferOpenKey,TxidPairKey,uint8_t>([&callback] (TxidPairKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXMakeOfferOpenKey,TxidPairKey,uint8_t>(callback, start);
 }
 
 void CICXOrderView::ForEachICXMakeOfferClose(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & txid)
 {
     TxidPairKey start(txid, uint256());
-    ForEach<ICXMakeOfferCloseKey,TxidPairKey,uint8_t>([&callback] (TxidPairKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXMakeOfferCloseKey,TxidPairKey,uint8_t>(callback, start);
 }
 
 void CICXOrderView::ForEachICXMakeOfferExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height)
 {
     StatusKey start(height, uint256());
-    ForEach<ICXOfferStatus,StatusKey,uint8_t>([&start, &callback] (StatusKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXOfferStatus,StatusKey,uint8_t>(callback, start);
 }
 
 std::unique_ptr<CICXOrderView::CICXSubmitDFCHTLCImpl> CICXOrderView::GetICXSubmitDFCHTLCByCreationTx(uint256 const & txid) const
@@ -204,25 +195,19 @@ Res CICXOrderView::ICXRefundDFCHTLC(CICXSubmitDFCHTLCImpl const & submitdfchtlc)
 void CICXOrderView::ForEachICXSubmitDFCHTLCOpen(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid)
 {
     TxidPairKey start(offertxid, uint256());
-    ForEach<ICXSubmitDFCHTLCOpenKey, TxidPairKey, uint8_t>([&callback] (TxidPairKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXSubmitDFCHTLCOpenKey, TxidPairKey, uint8_t>(callback, start);
 }
 
 void CICXOrderView::ForEachICXSubmitDFCHTLCClose(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid)
 {
     TxidPairKey start(offertxid,uint256());
-    ForEach<ICXSubmitDFCHTLCCloseKey, TxidPairKey, uint8_t>([&callback] (TxidPairKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXSubmitDFCHTLCCloseKey, TxidPairKey, uint8_t>(callback, start);
 }
 
 void CICXOrderView::ForEachICXSubmitDFCHTLCExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height)
 {
     StatusKey start(height, uint256());
-    ForEach<ICXSubmitDFCHTLCStatus, StatusKey, uint8_t>([&callback] (StatusKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXSubmitDFCHTLCStatus, StatusKey, uint8_t>(callback, start);
 }
 
 std::unique_ptr<CICXOrderView::CICXSubmitEXTHTLCImpl> CICXOrderView::GetICXSubmitEXTHTLCByCreationTx(const uint256 & txid) const
@@ -249,9 +234,7 @@ ResVal<uint256> CICXOrderView::ICXSubmitEXTHTLC(CICXSubmitEXTHTLCImpl const & su
 void CICXOrderView::ForEachICXSubmitEXTHTLC(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid)
 {
     TxidPairKey start(offertxid, uint256());
-    ForEach<ICXSubmitEXTHTLCKey,TxidPairKey,uint8_t>([&callback] (TxidPairKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXSubmitEXTHTLCKey,TxidPairKey,uint8_t>(callback, start);
 }
 
 std::unique_ptr<CICXOrderView::CICXClaimDFCHTLCImpl> CICXOrderView::GetICXClaimDFCHTLCByCreationTx(uint256 const & txid) const
@@ -293,9 +276,7 @@ ResVal<uint256> CICXOrderView::ICXClaimDFCHTLC(CICXClaimDFCHTLCImpl const & clai
 void CICXOrderView::ForEachICXClaimDFCHTLC(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid)
 {
     TxidPairKey start(offertxid, uint256());
-    ForEach<ICXClaimDFCHTLCKey,TxidPairKey,uint8_t>([&callback] (TxidPairKey const &key, uint8_t i) {
-        return callback(key, i);
-    }, start);
+    ForEach<ICXClaimDFCHTLCKey,TxidPairKey,uint8_t>(callback, start);
 }
 
 std::unique_ptr<CICXOrderView::CICXCloseOrderImpl> CICXOrderView::GetICXCloseOrderByCreationTx(uint256 const & txid) const
