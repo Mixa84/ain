@@ -108,6 +108,7 @@ class CICXMakeOffer
 {
 public:
     static const uint32_t DEFAULT_EXPIRY; // default period in blocks after offer automatically expires
+    static const uint32_t MAKER_DEPOSIT_REFUND_TIMEOUT; // minimum period in DFC blocks in which 2nd HTLC must be created, otherwise makerDeposit is refunded to maker
     static const uint8_t STATUS_OPEN;
     static const uint8_t STATUS_CLOSED;
     static const uint8_t STATUS_EXPIRED;
@@ -191,7 +192,6 @@ class CICXSubmitDFCHTLC
 {
 public:
     static const uint32_t DEFAULT_TIMEOUT; // default period in blocks after htlc automatically timeouts and funds are returned to owner
-    static const uint32_t MAKER_DEPOSIT_REFUND_TIMEOUT; // minimum period in blocks in which DFC HTLC must be created, otherwise makerDeposit is refunded to maker
     static const uint8_t STATUS_OPEN;
     static const uint8_t STATUS_CLAIMED;
     static const uint8_t STATUS_REFUNDED;
@@ -269,8 +269,9 @@ class CICXSubmitEXTHTLC
 {
 public:
     static const uint32_t DEFAULT_TIMEOUT; // default period in blocks after htlc timeouts and makerDeposit can be 
-    static const uint32_t MAKER_DEPOSIT_REFUND_TIMEOUT; // minimum period in blocks in which DFC HTLC must be created, otherwise makerDeposit is refunded to maker
     static const uint8_t STATUS_OPEN;
+    static const uint8_t STATUS_EXPIRED;
+
 
     // This tx is acceptance of the offer and evidence of HTLC on external chain in the same time. It is a CustomTx on DFC chain
     //! basic properties
@@ -548,7 +549,7 @@ public:
     //SubmitDFCHTLC
     std::unique_ptr<CICXSubmitDFCHTLCImpl> GetICXSubmitDFCHTLCByCreationTx(uint256 const & txid) const;
     ResVal<uint256> ICXSubmitDFCHTLC(CICXSubmitDFCHTLCImpl const & dfchtlc);
-    Res ICXRefundDFCHTLC(CICXSubmitDFCHTLCImpl const & dfchtlc);
+    Res ICXRefundDFCHTLC(CICXSubmitDFCHTLCImpl const & dfchtlc, uint8_t const);
     void ForEachICXSubmitDFCHTLCOpen(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
     void ForEachICXSubmitDFCHTLCClose(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
     void ForEachICXSubmitDFCHTLCExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
@@ -557,7 +558,8 @@ public:
     std::unique_ptr<CICXSubmitEXTHTLCImpl> GetICXSubmitEXTHTLCByCreationTx(uint256 const & txid) const;
     ResVal<uint256> ICXSubmitEXTHTLC(CICXSubmitEXTHTLCImpl const & dfchtlc);
     void ForEachICXSubmitEXTHTLC(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
-   
+    void ForEachICXSubmitEXTHTLCExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
+    
     //ClaimDFCHTLC
     std::unique_ptr<CICXClaimDFCHTLCImpl> GetICXClaimDFCHTLCByCreationTx(uint256 const & txid) const;
     ResVal<uint256> ICXClaimDFCHTLC(CICXClaimDFCHTLCImpl const & claimdfchtlc, CICXOrderImpl const & order);
@@ -595,7 +597,7 @@ public:
     struct ICXOrderStatus { static const unsigned char prefix; };
     struct ICXOfferStatus { static const unsigned char prefix; };
     struct ICXSubmitDFCHTLCStatus { static const unsigned char prefix; };
-    struct ICXSubmitEXTHTLCDeadline { static const unsigned char prefix; };
+    struct ICXSubmitEXTHTLCStatus { static const unsigned char prefix; };
 
     struct ICXDFIBTCPoolPairId { static const unsigned char prefix; };
 };

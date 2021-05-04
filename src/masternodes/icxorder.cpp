@@ -22,7 +22,7 @@ const unsigned char CICXOrderView::ICXClaimDFCHTLCKey           ::prefix = 0x08;
 const unsigned char CICXOrderView::ICXOrderStatus               ::prefix = 0x09;
 const unsigned char CICXOrderView::ICXOfferStatus               ::prefix = 0x0A;
 const unsigned char CICXOrderView::ICXSubmitDFCHTLCStatus       ::prefix = 0x0B;
-const unsigned char CICXOrderView::ICXSubmitEXTHTLCDeadline     ::prefix = 0x0C;
+const unsigned char CICXOrderView::ICXSubmitEXTHTLCStatus       ::prefix = 0x0C;
 
 const unsigned char CICXOrderView::ICXDFIBTCPoolPairId          ::prefix = 0x0D;
 
@@ -38,20 +38,20 @@ const std::string CICXOrder::CHAIN_BTC = "BTC";
 const std::string CICXOrder::TOKEN_BTC = "BTC";
 
 const uint32_t CICXMakeOffer::DEFAULT_EXPIRY = 10;
+const uint32_t CICXMakeOffer::MAKER_DEPOSIT_REFUND_TIMEOUT = 100;
 const uint8_t CICXMakeOffer::STATUS_OPEN = 0;
 const uint8_t CICXMakeOffer::STATUS_CLOSED = 1;
 const uint8_t CICXMakeOffer::STATUS_EXPIRED = 2;
 const CAmount CICXMakeOffer::TAKER_FEE_PER_BTC = AmountFromValue(0.1);
 
 const uint32_t CICXSubmitDFCHTLC::DEFAULT_TIMEOUT = 500;
-const uint32_t CICXSubmitDFCHTLC::MAKER_DEPOSIT_REFUND_TIMEOUT = 100;
 const uint8_t CICXSubmitDFCHTLC::STATUS_OPEN = 0;
 const uint8_t CICXSubmitDFCHTLC::STATUS_CLAIMED = 1;
 const uint8_t CICXSubmitDFCHTLC::STATUS_REFUNDED = 2;
 const uint8_t CICXSubmitDFCHTLC::STATUS_EXPIRED = 3;
 
-const uint32_t CICXSubmitEXTHTLC::MAKER_DEPOSIT_REFUND_TIMEOUT = 190;
 const uint8_t CICXSubmitEXTHTLC::STATUS_OPEN = 0;
+const uint8_t CICXSubmitEXTHTLC::STATUS_EXPIRED = 3;
 
 const CAmount CICXOrderView::DEFAULT_DFI_BTC_PRICE = 15000;
 
@@ -187,19 +187,19 @@ ResVal<uint256> CICXOrderView::ICXSubmitDFCHTLC(CICXSubmitDFCHTLCImpl const & su
 
     WriteBy<ICXSubmitDFCHTLCCreationTx>(submitdfchtlc.creationTx, submitdfchtlc);
     WriteBy<ICXSubmitDFCHTLCOpenKey>(TxidPairKey(submitdfchtlc.offerTx, submitdfchtlc.creationTx), CICXSubmitDFCHTLC::STATUS_OPEN);
-    WriteBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight + CICXSubmitDFCHTLC::MAKER_DEPOSIT_REFUND_TIMEOUT, submitdfchtlc.creationTx), CICXSubmitDFCHTLC::STATUS_REFUNDED);
-    WriteBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight + submitdfchtlc.timeout, submitdfchtlc.creationTx), CICXSubmitDFCHTLC::STATUS_EXPIRED);
+    WriteBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight + CICXMakeOffer::MAKER_DEPOSIT_REFUND_TIMEOUT, submitdfchtlc.creationTx), CICXSubmitDFCHTLC::STATUS_EXPIRED);
+    WriteBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight + submitdfchtlc.timeout, submitdfchtlc.creationTx), CICXSubmitDFCHTLC::STATUS_REFUNDED);
 
     return {submitdfchtlc.creationTx, Res::Ok()};
 }
 
-Res CICXOrderView::ICXRefundDFCHTLC(CICXSubmitDFCHTLCImpl const & submitdfchtlc)
+Res CICXOrderView::ICXRefundDFCHTLC(CICXSubmitDFCHTLCImpl const & submitdfchtlc, uint8_t const status)
 {
     WriteBy<ICXSubmitDFCHTLCCreationTx>(submitdfchtlc.creationTx, submitdfchtlc);
     EraseBy<ICXSubmitDFCHTLCOpenKey>(TxidPairKey(submitdfchtlc.offerTx, submitdfchtlc.creationTx));
-    WriteBy<ICXSubmitDFCHTLCCloseKey>(TxidPairKey(submitdfchtlc.offerTx, submitdfchtlc.creationTx), CICXSubmitDFCHTLC::STATUS_REFUNDED);
+    WriteBy<ICXSubmitDFCHTLCCloseKey>(TxidPairKey(submitdfchtlc.offerTx, submitdfchtlc.creationTx), status);
 
-    EraseBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight + CICXSubmitDFCHTLC::MAKER_DEPOSIT_REFUND_TIMEOUT, submitdfchtlc.creationTx));
+    EraseBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight + CICXMakeOffer::MAKER_DEPOSIT_REFUND_TIMEOUT, submitdfchtlc.creationTx));
     EraseBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitdfchtlc.creationHeight + submitdfchtlc.timeout, submitdfchtlc.creationTx));
 
     return (Res::Ok());
@@ -240,6 +240,7 @@ ResVal<uint256> CICXOrderView::ICXSubmitEXTHTLC(CICXSubmitEXTHTLCImpl const & su
 
     WriteBy<ICXSubmitEXTHTLCCreationTx>(submitexthtlc.creationTx, submitexthtlc);
     WriteBy<ICXSubmitEXTHTLCKey>(TxidPairKey(submitexthtlc.offerTx, submitexthtlc.creationTx), CICXSubmitEXTHTLC::STATUS_OPEN);
+    WriteBy<ICXSubmitDFCHTLCStatus>(StatusKey(submitexthtlc.creationHeight + CICXMakeOffer::MAKER_DEPOSIT_REFUND_TIMEOUT, submitexthtlc.creationTx), CICXSubmitEXTHTLC::STATUS_EXPIRED);
     
     return {submitexthtlc.creationTx, Res::Ok()};
 }
@@ -248,6 +249,12 @@ void CICXOrderView::ForEachICXSubmitEXTHTLC(std::function<bool (TxidPairKey cons
 {
     TxidPairKey start(offertxid, uint256());
     ForEach<ICXSubmitEXTHTLCKey,TxidPairKey,uint8_t>(callback, start);
+}
+
+void CICXOrderView::ForEachICXSubmitEXTHTLCExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height)
+{
+    StatusKey start(height, uint256());
+    ForEach<ICXSubmitEXTHTLCStatus, StatusKey, uint8_t>(callback, start);
 }
 
 std::unique_ptr<CICXOrderView::CICXClaimDFCHTLCImpl> CICXOrderView::GetICXClaimDFCHTLCByCreationTx(uint256 const & txid) const
