@@ -1189,14 +1189,13 @@ public:
         CScript txidAddr(makeoffer.creationTx.begin(),makeoffer.creationTx.end());
         
         //calculating DFI per BTC
-        boost::optional<CPoolPair> DFIBTCpair;
-        if (gArgs.GetChainName() == CBaseChainParams::MAIN)
-            DFIBTCpair = mnview.GetPoolPair({CICXMakeOffer::MAINNET_DFI_BTC_POOL_PAIR_ID});
-        else if (gArgs.GetChainName() == CBaseChainParams::TESTNET)
-            DFIBTCpair = mnview.GetPoolPair({CICXMakeOffer::TESTNET_DFI_BTC_POOL_PAIR_ID});
-        CAmount DFIperBTC = 0;
-        if (DFIBTCpair)
-            DFIperBTC = (arith_uint256(DFIBTCpair->reserveB) * arith_uint256(COIN) / DFIBTCpair->reserveA).GetLow64();
+        boost::optional<CPoolPair> DFIBTCPoolPair;
+        DCT_ID id = mnview.ICXGetDFIBTCPoolPairId(height);
+        if (id.v != std::numeric_limits<uint32_t>::max())
+            DFIBTCPoolPair = mnview.GetPoolPair(id);
+        CAmount DFIperBTC = CICXOrderView::DEFAULT_DFI_BTC_PRICE;
+        if (DFIBTCPoolPair)
+            DFIperBTC = (arith_uint256(DFIBTCPoolPair->reserveB) * arith_uint256(COIN) / DFIBTCPoolPair->reserveA).GetLow64();
        
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
@@ -1420,22 +1419,18 @@ public:
         if (!res.ok)
             return Res::Err("%s: %s", __func__, res.msg);
         
-        // maker rewards only on dBTC/BTC trades for now
-        if (mnview.GetToken(order->idToken)->CreateSymbolKey(order->idToken) == CICXOrder::TOKEN_BTC && order->chain == CICXOrder::CHAIN_BTC )
-        {
-            // makerIncentive
-            res = ModifyTokenBalance(DFIToken, offer->takerFee * 25 / 100, CScript(), order->ownerAddress);
+        // makerIncentive
+        res = ModifyTokenBalance(DFIToken, offer->takerFee * 25 / 100, CScript(), order->ownerAddress);
+        if (!res.ok)
+            return Res::Err("%s: %s", __func__, res.msg);
+
+        // maker bonus only on fair dBTC/BTC (1:1) trades for now
+        DCT_ID BTC;
+        if (mnview.GetTokenGuessId(CICXOrder::TOKEN_BTC,BTC) && order->idToken == BTC && order->chain == CICXOrder::CHAIN_BTC && order->orderPrice == COIN )
+        {               
+            res = ModifyTokenBalance(BTC, offer->takerFee * 50 / 100, CScript(), order->ownerAddress);
             if (!res.ok)
                 return Res::Err("%s: %s", __func__, res.msg);
-            
-            // makerBonus
-            DCT_ID BTC;
-            if (mnview.GetTokenGuessId(CICXOrder::CHAIN_BTC,BTC) && order->idToken == BTC && order->chain == CICXOrder::CHAIN_BTC)
-            {
-                res = ModifyTokenBalance(BTC, offer->takerFee * 50 / 100, CScript(), order->ownerAddress);
-                if (!res.ok)
-                    return Res::Err("%s: %s", __func__, res.msg);
-            }
         }
 
         if (order->orderType == CICXOrder::TYPE_INTERNAL)

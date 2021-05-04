@@ -309,7 +309,7 @@ UniValue icxmakeoffer(const JSONRPCRequest& request) {
                             {"ownerAddress", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Address of tokens in case of EXT/DFC order"},
                             {"receiveAddress", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "address for receiving DFC tokens in case of DFC/EXT order type"},
                             {"receivePubkey", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "pubkey which can claim external HTLC in case of EXT/DFC order type"},
-                            {"expiry", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Number of blocks until the offer expires (Default: 100 blocks)"},
+                            {"expiry", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Number of blocks until the offer expires (Default: 10 blocks)"},
                         },
                     },
                     {"inputs", RPCArg::Type::ARR, RPCArg::Optional::OMITTED_NAMED_ARG,
@@ -362,6 +362,9 @@ UniValue icxmakeoffer(const JSONRPCRequest& request) {
         throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"amount\" must be non-null");
     
     if (!metaObj["expiry"].isNull()) makeoffer.expiry = metaObj["expiry"].get_int();
+
+    if (makeoffer.expiry < CICXMakeOffer::DEFAULT_EXPIRY)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid parameters, argument \"expiry\" must be greater than %d", CICXMakeOffer::DEFAULT_EXPIRY - 1));
 
     int targetHeight;
     {
@@ -461,7 +464,7 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
                             {"receiveAddress", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "address that receives DFC tokens when HTLC is claimed"},
                             {"receivePubkey", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "pubkey which can claim external HTLC in case of DFC/EXT order type"},
                             {"hash", RPCArg::Type::STR, RPCArg::Optional::NO, "hash of seed used for the hash lock part"},
-                            {"timeout", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "timeout (absolute in blocks) for expiration of htlc (Default: 100)"},
+                            {"timeout", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "timeout (absolute in blocks) for expiration of htlc (Default: 10)"},
                         },
                     },
                     {"inputs", RPCArg::Type::ARR, RPCArg::Optional::OMITTED_NAMED_ARG,
@@ -520,7 +523,7 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
         throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"hash\" must be non-null");
     if (!metaObj["timeout"].isNull())
         submitdfchtlc.timeout = metaObj["timeout"].get_int();
-
+    
     int targetHeight;
     {
         LOCK(cs_main);
@@ -567,6 +570,9 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
             if (found)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("offer (%s) needs to have dfc htlc submitted first, but external htlc already submitted!",
                         submitdfchtlc.offerTx.GetHex()));
+            
+            if (submitdfchtlc.timeout < CICXSubmitDFCHTLC::DEFAULT_TIMEOUT)
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid parameters, argument \"timeout\" must be greater than %d", CICXSubmitDFCHTLC::DEFAULT_TIMEOUT - 1));
         }
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
@@ -735,6 +741,8 @@ UniValue icxsubmitexthtlc(const JSONRPCRequest& request) {
         auto order = pcustomcsview->GetICXOrderByCreationTx(offer->orderTx);
         if (!order)
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("orderTx (%s) does not exist",offer->orderTx.GetHex()));
+        
+
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
             if (submitexthtlc.amount != offer->amount)
@@ -802,8 +810,8 @@ UniValue icxsubmitexthtlc(const JSONRPCRequest& request) {
             if (found)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("offer (%s) needs to have dfc htlc submitted first, but external htlc already submitted!",
                         submitexthtlc.offerTx.GetHex()));
-        }
-
+        }        
+        
         targetHeight = ::ChainActive().Height() + 1;
     }
 
