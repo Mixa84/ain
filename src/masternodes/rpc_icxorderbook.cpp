@@ -576,6 +576,11 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
         }
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
+            CTokenAmount balance = pcustomcsview->GetBalance(offer->ownerAddress,order->idToken);
+            if (balance.nValue < offer->amount)
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s on address %s!", 
+                        pcustomcsview->GetToken(order->idToken)->CreateSymbolKey(order->idToken), ScriptToString(offer->ownerAddress)));
+
             if (submitdfchtlc.amount != offer->amount)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("cannot make dfc htlc with that amount, different amount necessary for offer (%s) - %s != %s!",
                                 offer->creationTx.GetHex(), ValueFromAmount(submitdfchtlc.amount).getValStr(), ValueFromAmount(offer->amount).getValStr()));

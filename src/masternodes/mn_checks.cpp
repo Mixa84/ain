@@ -1217,11 +1217,6 @@ public:
             if (!CPubKey(makeoffer.receiveDestination).IsFullyValid())
                 return Res::Err("%s: %s", __func__, "Invalid receivePubKey, (" + HexStr(makeoffer.receiveDestination) + ") receivePubkey is not a valid pubkey!");
 
-            // subtract the balance from tokenTo to dedicate them for the offer
-            res = ModifyTokenBalance(order->idToken, makeoffer.amount, makeoffer.ownerAddress, txidAddr);
-            if (!res.ok)
-                return Res::Err("%s: %s", __func__, res.msg);
-
             // calculating and locking takerFee in offer txidaddr
             if (DFIperBTC)
             {
@@ -1263,7 +1258,7 @@ public:
         if (submitdfchtlc.receiveAddress.empty())
             return Res::Err("Invalid, receiveAddress in htlc must be destination where tokens go on claim!");
             
-        CScript txidAddr;
+        CScript srcAddr;
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
             CAmount calcedAmount(static_cast<CAmount>((arith_uint256(submitdfchtlc.amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
@@ -1274,17 +1269,17 @@ public:
             if (!submitdfchtlc.receivePubkey.IsFullyValid())
                 return Res::Err("Invalid receivePubKey, (" + HexStr(submitdfchtlc.receivePubkey) + ") is not a valid pubkey!");
 
-            txidAddr = CScript(order->creationTx.begin(),order->creationTx.end());
+            srcAddr = CScript(order->creationTx.begin(),order->creationTx.end());
 
             // burn DFI for takerFee==makerDeposit
             CScript offerTxidAddr(offer->creationTx.begin(), offer->creationTx.end());
 
-            // takerFee
+            // burn takerFee
             res = TakerFeeTransfer(offerTxidAddr, consensus.burnAddress, offer->takerFee);
             if (!res.ok)
                 return Res::Err("%s: %s", __func__, res.msg);
 
-            // makerFee
+            // burn makerFee
             res = TakerFeeTransfer(order->ownerAddress, consensus.burnAddress, offer->takerFee);
             if (!res.ok)
                 return Res::Err("%s: %s", __func__, res.msg);
@@ -1295,12 +1290,12 @@ public:
                 return Res::Err("amount in dfc htlc must match the amount in offer - %s != %s!",
                         ValueFromAmount(submitdfchtlc.amount).getValStr(), ValueFromAmount(offer->amount).getValStr());
 
-            txidAddr = CScript(offer->creationTx.begin(), offer->creationTx.end());
+            srcAddr = offer->ownerAddress;
         }
 
         // subtract the balance from order/offer txidaddr and dedicate them for the dfc htlc
         CScript htlcTxidAddr(submitdfchtlc.creationTx.begin(), submitdfchtlc.creationTx.end());
-        res = ModifyTokenBalance(order->idToken, submitdfchtlc.amount, txidAddr, htlcTxidAddr);
+        res = ModifyTokenBalance(order->idToken, submitdfchtlc.amount, srcAddr, htlcTxidAddr);
             if (!res.ok)
                 return Res::Err("%s: %s", __func__, res.msg);
         
@@ -1451,7 +1446,10 @@ public:
                 return Res::Err("%s: %s", __func__, res.msg);
         }
         
-        return mnview.ICXClaimDFCHTLC(claimdfchtlc,*order);
+        res = mnview.ICXClaimDFCHTLC(claimdfchtlc,*order);
+        if (!res.ok)
+                return Res::Err("%s: %s", __func__, res.msg);
+        return mnview.ICXCloseDFCHTLC(*dfchtlc,CICXSubmitDFCHTLC::STATUS_CLAIMED);
     }
 
     Res operator()(const CICXCloseOrderMessage& obj) const {

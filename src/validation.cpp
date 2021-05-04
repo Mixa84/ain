@@ -2503,11 +2503,12 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                 auto order = cache.GetICXOrderByCreationTx(key.second);
                 if (order)
                 {
+                    Res res = Res::Ok();
                     if (order->orderType == CICXOrder::TYPE_INTERNAL)
                     {
-                    CTokenAmount amount({order->idToken,order->amountFrom});
+                        CTokenAmount amount({order->idToken,order->amountFrom});
                         CScript txidaddr = CScript(order->creationTx.begin(),order->creationTx.end());
-                        auto res = cache.SubBalance(txidaddr,amount);
+                        res = cache.SubBalance(txidaddr,amount);
                         if (!res)
                             LogPrintf("Can't subtract balance from order txidaddr: %s\n", res.msg);
                         if (res.ok)
@@ -2533,23 +2534,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                 auto offer = cache.GetICXMakeOfferByCreationTx(key.second);
                 if (offer)
                 {
-                    auto order = cache.GetICXOrderByCreationTx(offer->orderTx);
                     CScript txidAddr(offer->creationTx.begin(),offer->creationTx.end());
-
-                    if (order && order->orderType == CICXOrder::TYPE_EXTERNAL)
-                    {
-                        CTokenAmount amount({order->idToken,offer->amount});
-                        auto res = cache.SubBalance(txidAddr,amount);
-                        if (!res)
-                            LogPrintf("Can't subtract balance from offer txidAddr: %s\n", res.msg);
-                        if (res.ok)
-                        {
-                            res = cache.AddBalance(offer->ownerAddress,amount);
-                            if (!res)
-                                LogPrintf("Can't add balance back to owner: %s\n", res.msg);
-                        }
-                    }
-
                     DCT_ID idDFI{0};
                     CTokenAmount takerFee({idDFI,offer->takerFee});
                     auto res = cache.SubBalance(txidAddr,takerFee);
@@ -2632,7 +2617,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                     }
                     if (res.ok)
                     {
-                        res = cache.ICXRefundDFCHTLC(*dfchtlc,status);
+                        res = cache.ICXCloseDFCHTLC(*dfchtlc,status);
                         if (!res)
                             LogPrintf("Can't refund dfc htlc: %s\n", res.msg);
                     }

@@ -24,7 +24,7 @@ const unsigned char CICXOrderView::ICXOfferStatus               ::prefix = 0x0A;
 const unsigned char CICXOrderView::ICXSubmitDFCHTLCStatus       ::prefix = 0x0B;
 const unsigned char CICXOrderView::ICXSubmitEXTHTLCStatus       ::prefix = 0x0C;
 
-const unsigned char CICXOrderView::ICXDFIBTCPoolPairId          ::prefix = 0x0D;
+const unsigned char CICXOrderView::ICXDFIBTCPoolPairId          ::prefix = 0x0F;
 
 const uint32_t CICXOrder::DEFAULT_EXPIRY = 2880;
 const uint8_t CICXOrder::TYPE_INTERNAL = 1;
@@ -193,7 +193,7 @@ ResVal<uint256> CICXOrderView::ICXSubmitDFCHTLC(CICXSubmitDFCHTLCImpl const & su
     return {submitdfchtlc.creationTx, Res::Ok()};
 }
 
-Res CICXOrderView::ICXRefundDFCHTLC(CICXSubmitDFCHTLCImpl const & submitdfchtlc, uint8_t const status)
+Res CICXOrderView::ICXCloseDFCHTLC(CICXSubmitDFCHTLCImpl const & submitdfchtlc, uint8_t const status)
 {
     WriteBy<ICXSubmitDFCHTLCCreationTx>(submitdfchtlc.creationTx, submitdfchtlc);
     EraseBy<ICXSubmitDFCHTLCOpenKey>(TxidPairKey(submitdfchtlc.offerTx, submitdfchtlc.creationTx));
@@ -279,9 +279,6 @@ ResVal<uint256> CICXOrderView::ICXClaimDFCHTLC(CICXClaimDFCHTLCImpl const & clai
 
     WriteBy<ICXClaimDFCHTLCCreationTx>(claimdfchtlc.creationTx, claimdfchtlc);
     WriteBy<ICXClaimDFCHTLCKey>(TxidPairKey(dfchtlc->offerTx, claimdfchtlc.creationTx),CICXSubmitDFCHTLC::STATUS_CLAIMED);
-    
-    EraseBy<ICXSubmitDFCHTLCOpenKey>(TxidPairKey(dfchtlc->offerTx, dfchtlc->creationTx));
-    WriteBy<ICXSubmitDFCHTLCCloseKey>(TxidPairKey(dfchtlc->offerTx, dfchtlc->creationTx), CICXSubmitDFCHTLC::STATUS_CLAIMED);
 
     if (order.amountToFill != 0) 
     {
