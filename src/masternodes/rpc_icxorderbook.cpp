@@ -1307,7 +1307,6 @@ UniValue icxlistorders(const JSONRPCRequest& request) {
         else
         {
             pcustomcsview->ForEachICXMakeOfferOpen([&](CICXOrderView::TxidPairKey const & key, uint8_t status) {
-                std::cout << key.first.GetHex() << "|" << key.second.GetHex();
                 if (key.first != orderTxid)
                     return (false);
                 auto offer = pcustomcsview->GetICXMakeOfferByCreationTx(key.second);
@@ -1383,7 +1382,6 @@ UniValue icxlisthtlcs(const JSONRPCRequest& request) {
     
     UniValue ret(UniValue::VOBJ);
     pcustomcsview->ForEachICXClaimDFCHTLC([&](CICXOrderView::TxidPairKey const & key, uint8_t status) {
-        std::cout << key.first.GetHex() << std::endl;
         if (key.first != offerTxid)
             return false;
         auto claimdfchtlc = pcustomcsview->GetICXClaimDFCHTLCByCreationTx(key.second);

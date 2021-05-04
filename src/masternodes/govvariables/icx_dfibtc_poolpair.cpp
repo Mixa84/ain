@@ -14,7 +14,7 @@ Res ICX_DFIBTC_POOLPAIR::Import(const UniValue & val) {
 UniValue ICX_DFIBTC_POOLPAIR::Export() const {
     UniValue res(UniValue::VOBJ);
 
-    return res.pushKV("poolPairId",static_cast<int>(poolPairId.v));
+    return static_cast<int>(poolPairId.v);
 }
 
 Res ICX_DFIBTC_POOLPAIR::Validate(const CCustomCSView &mnview) const

@@ -1189,14 +1189,11 @@ public:
         CScript txidAddr(makeoffer.creationTx.begin(),makeoffer.creationTx.end());
         
         //calculating DFI per BTC
-        boost::optional<CPoolPair> DFIBTCPoolPair;
-        DCT_ID id = mnview.ICXGetDFIBTCPoolPairId(height);
-        if (id.v != std::numeric_limits<uint32_t>::max())
-            DFIBTCPoolPair = mnview.GetPoolPair(id);
+        auto id = mnview.ICXGetDFIBTCPoolPairId(height);
+        auto DFIBTCPoolPair = mnview.GetPoolPair(id);
         CAmount DFIperBTC = CICXOrderView::DEFAULT_DFI_BTC_PRICE;
         if (DFIBTCPoolPair)
-            DFIperBTC = (arith_uint256(DFIBTCPoolPair->reserveB) * arith_uint256(COIN) / DFIBTCPoolPair->reserveA).GetLow64();
-       
+            DFIperBTC = (arith_uint256(DFIBTCPoolPair->reserveA) * arith_uint256(COIN) / DFIBTCPoolPair->reserveB).GetLow64();
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
             if (makeoffer.receiveDestination.empty())
@@ -1205,7 +1202,8 @@ public:
             // calculating and locking takerFee in offer txidaddr
             if (DFIperBTC)
             {
-                makeoffer.takerFee = (arith_uint256(makeoffer.amount) * CICXMakeOffer::TAKER_FEE_PER_BTC * arith_uint256(DFIperBTC)).GetLow64();
+                makeoffer.takerFee = (arith_uint256(makeoffer.amount) * arith_uint256(CICXMakeOffer::TAKER_FEE_PER_BTC) / arith_uint256(COIN)
+                        * arith_uint256(DFIperBTC) / arith_uint256(COIN)).GetLow64();
                 CScript receiveAddress(makeoffer.receiveDestination.begin(), makeoffer.receiveDestination.end());
                 res = TakerFeeTransfer(receiveAddress, txidAddr, makeoffer.takerFee);
                 if (!res.ok)
@@ -1228,7 +1226,8 @@ public:
             if (DFIperBTC)
             {
                 CAmount BTCAmount(static_cast<CAmount>((arith_uint256(makeoffer.amount) * arith_uint256(COIN) / arith_uint256(order->orderPrice)).GetLow64()));
-                makeoffer.takerFee = (arith_uint256(BTCAmount) * CICXMakeOffer::TAKER_FEE_PER_BTC * arith_uint256(DFIperBTC)).GetLow64();
+                makeoffer.takerFee = (arith_uint256(BTCAmount) * arith_uint256(CICXMakeOffer::TAKER_FEE_PER_BTC) / arith_uint256(COIN)
+                        * arith_uint256(DFIperBTC) / arith_uint256(COIN)).GetLow64();
                 res = TakerFeeTransfer(makeoffer.ownerAddress, txidAddr, makeoffer.takerFee);
                 if (!res.ok)
                     return Res::Err("%s: %s", __func__, res.msg);

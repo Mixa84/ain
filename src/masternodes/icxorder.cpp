@@ -1,4 +1,5 @@
 #include <masternodes/icxorder.h>
+#include <rpc/util.h> /// AmountFromValue
 
 /// @attention make sure that it does not overlap with other views !!!
 const unsigned char CICXOrderView::ICXOrderCreationTx           ::prefix = '1';
@@ -40,7 +41,7 @@ const uint32_t CICXMakeOffer::DEFAULT_EXPIRY = 10;
 const uint8_t CICXMakeOffer::STATUS_OPEN = 0;
 const uint8_t CICXMakeOffer::STATUS_CLOSED = 1;
 const uint8_t CICXMakeOffer::STATUS_EXPIRED = 2;
-const CAmount CICXMakeOffer::TAKER_FEE_PER_BTC = 0.1;
+const CAmount CICXMakeOffer::TAKER_FEE_PER_BTC = AmountFromValue(0.1);
 
 const uint32_t CICXSubmitDFCHTLC::DEFAULT_TIMEOUT = 500;
 const uint32_t CICXSubmitDFCHTLC::MAKER_DEPOSIT_REFUND_TIMEOUT = 100;
@@ -269,7 +270,6 @@ ResVal<uint256> CICXOrderView::ICXClaimDFCHTLC(CICXClaimDFCHTLCImpl const & clai
         return Res::Err("submitdfchtlc tx %s cannot be found!", claimdfchtlc.dfchtlcTx.GetHex());
     }
 
-    std::cout << dfchtlc->offerTx.GetHex() << "|" << claimdfchtlc.creationTx.GetHex() << std::endl;
     WriteBy<ICXClaimDFCHTLCCreationTx>(claimdfchtlc.creationTx, claimdfchtlc);
     WriteBy<ICXClaimDFCHTLCKey>(TxidPairKey(dfchtlc->offerTx, claimdfchtlc.creationTx),CICXSubmitDFCHTLC::STATUS_CLAIMED);
     
@@ -348,7 +348,7 @@ DCT_ID CICXOrderView::ICXGetDFIBTCPoolPairId(uint32_t const start)
             return true;
         }
         return (false);
-    }, start);
+    });
 
     return (poolPairId);
 }
