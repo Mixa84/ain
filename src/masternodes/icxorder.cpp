@@ -35,7 +35,6 @@ const uint8_t CICXOrder::STATUS_OPEN = 0;
 const uint8_t CICXOrder::STATUS_CLOSED = 1;
 const uint8_t CICXOrder::STATUS_FILLED = 2;
 const uint8_t CICXOrder::STATUS_EXPIRED = 3;
-const uint8_t CICXOrder::DFI_TOKEN_ID = 0;
 const std::string CICXOrder::CHAIN_BTC = "BTC";
 const std::string CICXOrder::TOKEN_BTC = "BTC";
 

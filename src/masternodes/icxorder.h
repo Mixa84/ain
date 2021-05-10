@@ -15,22 +15,21 @@ class CICXOrder
 {
 public:
     static const uint32_t DEFAULT_EXPIRY; // default period in blocks after order automatically expires
-    static const uint8_t TYPE_INTERNAL;
-    static const uint8_t TYPE_EXTERNAL;
+    static const uint8_t TYPE_INTERNAL; // type for DFI/BTC orders
+    static const uint8_t TYPE_EXTERNAL; // type for BTC/DFI orders
     static const uint8_t STATUS_OPEN;
-    static const uint8_t STATUS_CLOSED;
-    static const uint8_t STATUS_FILLED;
-    static const uint8_t STATUS_EXPIRED;
-    static const uint8_t DFI_TOKEN_ID;
+    static const uint8_t STATUS_CLOSED; // manually close status
+    static const uint8_t STATUS_FILLED; // completely filled status
+    static const uint8_t STATUS_EXPIRED; // offer expired status
     static const std::string CHAIN_BTC;
-    static const std::string TOKEN_BTC;
+    static const std::string TOKEN_BTC; // name of BTC token on DFC
 
     //! basic properties
     uint8_t orderType; //is maker buying or selling DFC asset to know which htlc to come first
     DCT_ID idToken; // used for DFT/BTC
     std::string chain; // used for BTC/DFT
     CScript ownerAddress; //address of token asset in case of DFC/BTC order
-    CAmount amountFrom; // amount of asset that is selled
+    CAmount amountFrom; // amount of asset that is sold
     CAmount amountToFill; // how much is left to fill the order
     CAmount orderPrice; // price of asset buying in asset selling
     uint32_t expiry; // when the order exipres in number of blocks

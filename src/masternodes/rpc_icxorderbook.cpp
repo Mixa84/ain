@@ -540,6 +540,7 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
         submitdfchtlc.timeout = metaObj["timeout"].get_int();
 
     int targetHeight;
+    CScript authScript;
     {
         LOCK(cs_main);
         auto offer = pcustomcsview->GetICXMakeOfferByCreationTx(submitdfchtlc.offerTx);
@@ -553,6 +554,8 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
 
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
+            authScript = order->ownerAddress;
+
             if (!metaObj["receivePubkey"].isNull()) {
                 submitdfchtlc.receivePubkey = PublickeyFromString(trim_ws(metaObj["receivePubkey"].getValStr()));
                 if (!submitdfchtlc.receivePubkey.IsFullyValid())
@@ -563,16 +566,18 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
 
             if (pcustomcsview->HasICXSubmitDFCHTLCOpen(submitdfchtlc.offerTx))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "dfc htlc already submitted!");
-
             if (pcustomcsview->HasICXSubmitEXTHTLCOpen(submitdfchtlc.offerTx))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("offer (%s) needs to have dfc htlc submitted first, but external htlc already submitted!",
                         submitdfchtlc.offerTx.GetHex()));
 
             if (submitdfchtlc.timeout < CICXSubmitDFCHTLC::MINIMUM_TIMEOUT)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid parameters, argument \"timeout\" must be greater than %d", CICXSubmitDFCHTLC::MINIMUM_TIMEOUT - 1));
+
         }
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
+            authScript = offer->ownerAddress;
+
             CTokenAmount balance = pcustomcsview->GetBalance(offer->ownerAddress,order->idToken);
             if (balance.nValue < offer->amount)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Not enough balance for Token %s on address %s!",
@@ -584,11 +589,11 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
 
             if (pcustomcsview->HasICXSubmitDFCHTLCOpen(submitdfchtlc.offerTx))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "dfc htlc already submitted!");
-
             auto exthtlc = pcustomcsview->HasICXSubmitEXTHTLCOpen(submitdfchtlc.offerTx);
             if (!exthtlc)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("offer (%s) needs to have ext htlc submitted first, but no external htlc found!",
                             submitdfchtlc.offerTx.GetHex()));
+
             if (submitdfchtlc.hash != exthtlc->hash)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid hash, dfc htlc hash is different than extarnal htlc hash!");
             if (submitdfchtlc.timeout < CICXSubmitDFCHTLC::MINIMUM_2ND_TIMEOUT)
@@ -610,7 +615,7 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
     CMutableTransaction rawTx(txVersion);
 
     CTransactionRef optAuthTx;
-    std::set<CScript> auths;
+    std::set<CScript> auths{authScript};
     rawTx.vin = GetAuthInputsSmart(pwallet, rawTx.nVersion, auths, false, optAuthTx, txInputs);
 
     rawTx.vout.push_back(CTxOut(0, scriptMeta));
@@ -618,12 +623,10 @@ UniValue icxsubmitdfchtlc(const JSONRPCRequest& request) {
     CCoinControl coinControl;
 
     // Return change to auth address
-    if (auths.size() == 1) {
-        CTxDestination dest;
-        ExtractDestination(*auths.cbegin(), dest);
-        if (IsValidDestination(dest))
-            coinControl.destChange = dest;
-    }
+    CTxDestination dest;
+    ExtractDestination(*auths.cbegin(), dest);
+    if (IsValidDestination(dest))
+        coinControl.destChange = dest;
 
     fund(rawTx, pwallet, optAuthTx,&coinControl);
 
@@ -723,6 +726,7 @@ UniValue icxsubmitexthtlc(const JSONRPCRequest& request) {
         throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"timeout\" must be non-null");
 
     int targetHeight;
+    CScript authScript;
     {
         LOCK(cs_main);
         auto offer = pcustomcsview->GetICXMakeOfferByCreationTx(submitexthtlc.offerTx);
@@ -736,16 +740,19 @@ UniValue icxsubmitexthtlc(const JSONRPCRequest& request) {
 
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
+            authScript = offer->ownerAddress;
+
             if (submitexthtlc.amount != offer->amount)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("cannot make ext htlc with that amount, different amount necessary for offer (%s) - %s != %s!",
                                 offer->creationTx.GetHex(), ValueFromAmount(submitexthtlc.amount).getValStr(), ValueFromAmount(offer->amount).getValStr()));
+
             if (pcustomcsview->HasICXSubmitEXTHTLCOpen(submitexthtlc.offerTx))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "ext htlc already submitted!");
-
             auto dfchtlc = pcustomcsview->HasICXSubmitDFCHTLCOpen(submitexthtlc.offerTx);
             if (!dfchtlc)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("offer (%s) needs to have dfc htlc submitted first, but no dfc htlc found!",
                         submitexthtlc.offerTx.GetHex()));
+
             if (submitexthtlc.hash != dfchtlc->hash)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid hash, external htlc hash is different than dfc htlc hash! - %s != %s!",
                         submitexthtlc.hash.GetHex(),dfchtlc->hash.GetHex()));
@@ -756,6 +763,8 @@ UniValue icxsubmitexthtlc(const JSONRPCRequest& request) {
         }
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
+            authScript = order->ownerAddress;
+
             if (!metaObj["receiveAddress"].isNull())
                 submitexthtlc.receiveAddress=DecodeScript(metaObj["receiveAddress"].getValStr());
             else
@@ -765,10 +774,10 @@ UniValue icxsubmitexthtlc(const JSONRPCRequest& request) {
 
             if (pcustomcsview->HasICXSubmitEXTHTLCOpen(submitexthtlc.offerTx))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "ext htlc already submitted!");
-
             if (pcustomcsview->HasICXSubmitDFCHTLCOpen(submitexthtlc.offerTx))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("offer (%s) needs to have dfc htlc submitted first, but external htlc already submitted!",
                         submitexthtlc.offerTx.GetHex()));
+
             if (submitexthtlc.timeout < CICXSubmitEXTHTLC::MINIMUM_TIMEOUT)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid parameters, argument \"timeout\" must be greater than %d", CICXSubmitEXTHTLC::MINIMUM_TIMEOUT - 1));
         }
@@ -904,33 +913,16 @@ UniValue icxclaimdfchtlc(const JSONRPCRequest& request) {
     const auto txVersion = GetTransactionVersion(targetHeight);
     CMutableTransaction rawTx(txVersion);
 
-    CTransactionRef optAuthTx;
-    std::set<CScript> auths;
-    rawTx.vin = GetAuthInputsSmart(pwallet, rawTx.nVersion, auths, false, optAuthTx, txInputs);
-
     rawTx.vout.push_back(CTxOut(0, scriptMeta));
 
-    CCoinControl coinControl;
-
-    // Return change to auth address
-    if (auths.size() == 1) {
-        CTxDestination dest;
-        ExtractDestination(*auths.cbegin(), dest);
-        if (IsValidDestination(dest))
-            coinControl.destChange = dest;
-    }
-
-    fund(rawTx, pwallet, optAuthTx,&coinControl);
+    fund(rawTx, pwallet, {});
 
     // check execution
     {
         LOCK(cs_main);
         CCustomCSView mnview_dummy(*pcustomcsview); // don't write into actual DB
-        CCoinsViewCache coinview(&::ChainstateActive().CoinsTip());
-        if (optAuthTx)
-            AddCoins(coinview, *optAuthTx, targetHeight);
         auto metadata = ToByteVector(CDataStream{SER_NETWORK, PROTOCOL_VERSION, claimdfchtlc});
-        execTestTx(CTransaction(rawTx), targetHeight, metadata, CICXClaimDFCHTLCMessage{}, coinview);
+        execTestTx(CTransaction(rawTx), targetHeight, metadata, CICXClaimDFCHTLCMessage{});
     }
     return signsend(rawTx, pwallet, {})->GetHash().GetHex();
 }

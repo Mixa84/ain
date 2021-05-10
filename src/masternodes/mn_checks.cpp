@@ -1143,7 +1143,7 @@ public:
         if (order.orderType == CICXOrder::TYPE_INTERNAL)
         {
             if (order.ownerAddress.empty())
-                return Res::Err("ownerAddress must be not-null!");
+                return Res::Err("ownerAddress must not be null!");
 
             // subtract the balance from tokenFrom to dedicate them for the order
             CScript txidAddr(order.creationTx.begin(), order.creationTx.end());
@@ -1194,7 +1194,7 @@ public:
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
             if (makeoffer.ownerAddress.empty())
-                return Res::Err("ownerAddress must be not-null!");
+                return Res::Err("ownerAddress must not be null!");
             if (!CPubKey(makeoffer.receiveDestination).IsFullyValid())
                 return Res::Err("Invalid receivePubKey, (" + HexStr(makeoffer.receiveDestination) + ") receivePubkey is not a valid pubkey!");
 
@@ -1233,6 +1233,12 @@ public:
         CScript srcAddr;
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
+            const Coin& auth = coins.AccessCoin(COutPoint(order->creationTx, 1)); // always n=1 output
+            // check auth
+            if (!HasAuth(auth.out.scriptPubKey)) {
+                return Res::Err("tx must have at least one input from order owner");
+            }
+
             CAmount calcAmount(static_cast<CAmount>((arith_uint256(submitdfchtlc.amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
             if (calcAmount != offer->amount)
                 return Res::Err("amount in dfc htlc must match the amount necessary for offer amount - %f != %f!",
@@ -1258,6 +1264,12 @@ public:
         }
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
+            const Coin& auth = coins.AccessCoin(COutPoint(offer->creationTx, 1)); // always n=1 output
+            // check auth
+            if (!HasAuth(auth.out.scriptPubKey)) {
+                return Res::Err("tx must have at least one input from offer owner");
+            }
+
             if (submitdfchtlc.amount != offer->amount)
                 return Res::Err("amount in dfc htlc must match the amount in offer - %s != %s!",
                                 GetDecimaleString(submitdfchtlc.amount), GetDecimaleString(offer->amount));
@@ -1265,7 +1277,7 @@ public:
             srcAddr = offer->ownerAddress;
         }
 
-        // subtract the balance from order/offer txidaddr and dedicate them for the dfc htlc
+        // subtract the balance from order txidaddr or offer owner address and dedicate them for the dfc htlc
         CScript htlcTxidAddr(submitdfchtlc.creationTx.begin(), submitdfchtlc.creationTx.end());
         res = ICXTransfer(order->idToken, submitdfchtlc.amount, srcAddr, htlcTxidAddr);
         if (!res)
@@ -1295,12 +1307,24 @@ public:
 
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
+            const Coin& auth = coins.AccessCoin(COutPoint(offer->creationTx, 1)); // always n=1 output
+            // check auth
+            if (!HasAuth(auth.out.scriptPubKey)) {
+                return Res::Err("tx must have at least one input from offer owner");
+            }
+
             if (submitexthtlc.amount != offer->amount)
                 return Res::Err("amount in ext htlc must match the amount in the offer - %s != %s!",
                                 GetDecimaleString(submitexthtlc.amount), GetDecimaleString(offer->amount));
         }
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
+            const Coin& auth = coins.AccessCoin(COutPoint(order->creationTx, 1)); // always n=1 output
+            // check auth
+            if (!HasAuth(auth.out.scriptPubKey)) {
+                return Res::Err("tx must have at least one input from order owner");
+            }
+
             CAmount calcAmount(static_cast<CAmount>((arith_uint256(submitexthtlc.amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
             if (calcAmount != offer->amount)
                 return Res::Err("amount in dfc htlc must match the amount necessary for offer amount - %s != %s!",
