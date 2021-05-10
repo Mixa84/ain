@@ -248,6 +248,19 @@ void CICXOrderView::ForEachICXSubmitDFCHTLCExpire(std::function<bool (StatusKey 
     ForEach<ICXSubmitDFCHTLCStatus, StatusKey, uint8_t>(callback, start);
 }
 
+std::unique_ptr<CICXOrderView::CICXSubmitDFCHTLCImpl> CICXOrderView::HasICXSubmitDFCHTLCOpen(uint256 const & offertxid)
+{
+    std::unique_ptr<CICXSubmitDFCHTLCImpl> dfchtlc;
+    this->ForEachICXSubmitDFCHTLCOpen([&](CICXOrderView::TxidPairKey const & key, uint8_t i) {
+        if (key.first != offertxid)
+            return false;
+        dfchtlc = this->GetICXSubmitDFCHTLCByCreationTx(key.second);;
+        return false;
+    }, offertxid);
+
+    return (dfchtlc);
+}
+
 std::unique_ptr<CICXOrderView::CICXSubmitEXTHTLCImpl> CICXOrderView::GetICXSubmitEXTHTLCByCreationTx(const uint256 & txid) const
 {
     auto submitexthtlc = ReadBy<ICXSubmitEXTHTLCCreationTx,CICXSubmitEXTHTLCImpl>(txid);
@@ -307,6 +320,19 @@ void CICXOrderView::ForEachICXSubmitEXTHTLCExpire(std::function<bool (StatusKey 
     ForEach<ICXSubmitEXTHTLCStatus, StatusKey, uint8_t>(callback, start);
 }
 
+std::unique_ptr<CICXOrderView::CICXSubmitEXTHTLCImpl> CICXOrderView::HasICXSubmitEXTHTLCOpen(uint256 const & offertxid)
+{
+    std::unique_ptr<CICXSubmitEXTHTLCImpl> exthtlc;
+    this->ForEachICXSubmitEXTHTLCOpen([&](CICXOrderView::TxidPairKey const & key, uint8_t i) {
+        if (key.first != offertxid)
+            return false;
+        exthtlc = GetICXSubmitEXTHTLCByCreationTx(key.second);
+        return false;
+    }, offertxid);
+
+    return (exthtlc);
+}
+
 std::unique_ptr<CICXOrderView::CICXClaimDFCHTLCImpl> CICXOrderView::GetICXClaimDFCHTLCByCreationTx(uint256 const & txid) const
 {
     auto claimdfchtlc = ReadBy<ICXClaimDFCHTLCCreationTx,CICXClaimDFCHTLCImpl>(txid);
@@ -330,7 +356,7 @@ ResVal<uint256> CICXOrderView::ICXClaimDFCHTLC(CICXClaimDFCHTLCImpl const & clai
     WriteBy<ICXClaimDFCHTLCCreationTx>(claimdfchtlc.creationTx, claimdfchtlc);
     WriteBy<ICXClaimDFCHTLCKey>(TxidPairKey(dfchtlc->offerTx, claimdfchtlc.creationTx),CICXSubmitDFCHTLC::STATUS_CLAIMED);
 
-    if (order.amountToFill != 0) 
+    if (order.amountToFill != 0)
     {
         OrderKey key({order.idToken,order.chain}, order.creationTx);
         WriteBy<ICXOrderCreationTx>(order.creationTx, order);

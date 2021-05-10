@@ -69,7 +69,7 @@ public:
     //! tx related properties
     uint256 creationTx;
     uint256 closeTx;
-    int32_t creationHeight; 
+    int32_t creationHeight;
     int32_t closeHeight;
 
     CICXOrderImplemetation()
@@ -236,7 +236,7 @@ class CICXSubmitDFCHTLCImplemetation : public CICXSubmitDFCHTLC
 public:
     //! tx related properties
     uint256 creationTx;
-    int32_t creationHeight; 
+    int32_t creationHeight;
 
     CICXSubmitDFCHTLCImplemetation()
         : CICXSubmitDFCHTLC()
@@ -280,7 +280,7 @@ public:
     uint256 offerTx; // txid for which offer is this HTLC
     CAmount amount;
     CScript receiveAddress;
-    uint256 hash; 
+    uint256 hash;
     std::string htlcscriptAddress;
     CPubKey ownerPubkey;
     uint32_t timeout;
@@ -316,7 +316,7 @@ class CICXSubmitEXTHTLCImplemetation : public CICXSubmitEXTHTLC
 public:
     //! tx related properties
     uint256 creationTx;
-    int32_t creationHeight; 
+    int32_t creationHeight;
 
     CICXSubmitEXTHTLCImplemetation()
         : CICXSubmitEXTHTLC()
@@ -374,7 +374,7 @@ class CICXClaimDFCHTLCImplemetation : public CICXClaimDFCHTLC
 public:
     //! tx related properties
     uint256 creationTx;
-    int32_t creationHeight; 
+    int32_t creationHeight;
 
     CICXClaimDFCHTLCImplemetation()
         : CICXClaimDFCHTLC()
@@ -429,7 +429,7 @@ class CICXCloseOrderImplemetation : public CICXCloseOrder
 public:
     //! tx related properties
     uint256 creationTx;
-    int32_t creationHeight; 
+    int32_t creationHeight;
 
     CICXCloseOrderImplemetation()
         : CICXCloseOrder()
@@ -484,7 +484,7 @@ class CICXCloseOfferImplemetation : public CICXCloseOffer
 public:
     //! tx related properties
     uint256 creationTx;
-    int32_t creationHeight; 
+    int32_t creationHeight;
 
     CICXCloseOfferImplemetation()
         : CICXCloseOffer()
@@ -538,9 +538,9 @@ public:
     Res ICXCreateOrder(CICXOrderImpl const & order);
     Res ICXUpdateOrder(CICXOrderImpl const & order);
     Res ICXCloseOrderTx(CICXOrderImpl const & order, uint8_t const);
-    void ForEachICXOrderOpen(std::function<bool (OrderKey const &, uint8_t)> callback, AssetPair const & pair = AssetPair());    
-    void ForEachICXOrderClose(std::function<bool (OrderKey const &, uint8_t)> callback, AssetPair const & pair = AssetPair());    
-    void ForEachICXOrderExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);    
+    void ForEachICXOrderOpen(std::function<bool (OrderKey const &, uint8_t)> callback, AssetPair const & pair = AssetPair());
+    void ForEachICXOrderClose(std::function<bool (OrderKey const &, uint8_t)> callback, AssetPair const & pair = AssetPair());
+    void ForEachICXOrderExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
 
     //MakeOffer
     std::unique_ptr<CICXMakeOfferImpl> GetICXMakeOfferByCreationTx(uint256 const & txid) const;
@@ -548,7 +548,7 @@ public:
     Res ICXCloseMakeOfferTx(CICXMakeOfferImpl const & order, uint8_t const);
     void ForEachICXMakeOfferOpen(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & ordertxid = uint256());
     void ForEachICXMakeOfferClose(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & ordertxid = uint256());
-    void ForEachICXMakeOfferExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);    
+    void ForEachICXMakeOfferExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
 
     //SubmitDFCHTLC
     std::unique_ptr<CICXSubmitDFCHTLCImpl> GetICXSubmitDFCHTLCByCreationTx(uint256 const & txid) const;
@@ -557,6 +557,7 @@ public:
     void ForEachICXSubmitDFCHTLCOpen(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
     void ForEachICXSubmitDFCHTLCClose(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
     void ForEachICXSubmitDFCHTLCExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
+    std::unique_ptr<CICXSubmitDFCHTLCImpl> HasICXSubmitDFCHTLCOpen(uint256 const & offertxid);
 
     //SubmitEXTHTLC
     std::unique_ptr<CICXSubmitEXTHTLCImpl> GetICXSubmitEXTHTLCByCreationTx(uint256 const & txid) const;
@@ -565,6 +566,7 @@ public:
     void ForEachICXSubmitEXTHTLCOpen(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
     void ForEachICXSubmitEXTHTLCClose(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
     void ForEachICXSubmitEXTHTLCExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
+    std::unique_ptr<CICXSubmitEXTHTLCImpl> HasICXSubmitEXTHTLCOpen(uint256 const & offertxid);
 
     //ClaimDFCHTLC
     std::unique_ptr<CICXClaimDFCHTLCImpl> GetICXClaimDFCHTLCByCreationTx(uint256 const & txid) const;
