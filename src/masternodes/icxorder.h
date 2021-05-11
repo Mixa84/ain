@@ -24,11 +24,10 @@ public:
     static const std::string CHAIN_BTC;
     static const std::string TOKEN_BTC; // name of BTC token on DFC
 
-    //! basic properties
     uint8_t orderType; //is maker buying or selling DFC asset to know which htlc to come first
     DCT_ID idToken; // used for DFT/BTC
-    std::string chain; // used for BTC/DFT
-    CScript ownerAddress; //address of token asset in case of DFC/BTC order
+    CScript ownerAddress; //address for DFI token for fees, and in case of DFC/BTC order for DFC asset
+    CPubKey receivePubkey; // address of BTC pubkey in case of BTC/DFC order
     CAmount amountFrom; // amount of asset that is sold
     CAmount amountToFill; // how much is left to fill the order
     CAmount orderPrice; // price of asset buying in asset selling
@@ -37,15 +36,11 @@ public:
     CICXOrder()
         : orderType(0)
         , idToken({std::numeric_limits<uint32_t>::max()})
-        , chain()
-        , ownerAddress()
         , amountFrom(0)
         , amountToFill(0)
         , orderPrice(0)
         , expiry(DEFAULT_EXPIRY)
     {}
-
-    virtual ~CICXOrder() = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -53,8 +48,8 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(orderType);
         READWRITE(VARINT(idToken.v));
-        READWRITE(chain);
         READWRITE(ownerAddress);
+        READWRITE(receivePubkey);
         READWRITE(amountFrom);
         READWRITE(amountToFill);
         READWRITE(orderPrice);
@@ -65,7 +60,6 @@ public:
 class CICXOrderImplemetation : public CICXOrder
 {
 public:
-    //! tx related properties
     uint256 creationTx;
     uint256 closeTx;
     int32_t creationHeight;
@@ -73,13 +67,9 @@ public:
 
     CICXOrderImplemetation()
         : CICXOrder()
-        , creationTx()
-        , closeTx()
         , creationHeight(-1)
         , closeHeight(-1)
     {}
-
-    ~CICXOrderImplemetation() override = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -113,24 +103,18 @@ public:
     static const uint8_t STATUS_EXPIRED;
     static const int64_t DEFAULT_TAKER_FEE_PER_BTC;
 
-    //! basic properties
     uint256 orderTx; // txid for which order is the offer
     CAmount amount; // amount of asset to swap
-    std::vector<uint8_t> receiveDestination; // address or pubkey of receiving asset
-    CScript ownerAddress; // address of token asset in case of EXT/DFC order
+    CScript ownerAddress; //address for DFI token for fees, and in case of BTC/DFC order for DFC asset
+    CPubKey receivePubkey; // address or BTC pubkey in case of DFC/BTC order
     uint32_t expiry; // when the offer exipres in number of blocks
     CAmount takerFee;
 
     CICXMakeOffer()
-        : orderTx(uint256())
-        , amount(0)
-        , receiveDestination()
-        , ownerAddress()
+        : amount(0)
         , expiry(DEFAULT_EXPIRY)
         , takerFee(0)
     {}
-
-    virtual ~CICXMakeOffer() = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -138,8 +122,8 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(orderTx);
         READWRITE(amount);
-        READWRITE(receiveDestination);
         READWRITE(ownerAddress);
+        READWRITE(receivePubkey);
         READWRITE(expiry);
         READWRITE(takerFee);
     }
@@ -148,7 +132,6 @@ public:
 class CICXMakeOfferImplemetation : public CICXMakeOffer
 {
 public:
-    //! tx related properties
     uint256 creationTx;
     uint256 closeTx;
     int32_t creationHeight;
@@ -157,13 +140,9 @@ public:
 
     CICXMakeOfferImplemetation()
         : CICXMakeOffer()
-        , creationTx()
-        , closeTx()
         , creationHeight(-1)
         , closeHeight(-1)
     {}
-
-    ~CICXMakeOfferImplemetation() override = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -198,24 +177,17 @@ public:
     static const uint8_t STATUS_EXPIRED;
 
     // This tx is acceptance of the offer, HTLC tx and evidence of HTLC on DFC in the same time. It is a CustomTx on DFC chain
-    //! basic properties
     uint256 offerTx; // txid for which offer is this HTLC
     CAmount amount; // amount that is put in HTLC
-    CScript receiveAddress; // address receiving DFC asset
-    CPubKey receivePubkey; // pubkey for receiving EXT asset
     uint256 hash; // hash for the hash lock part
     uint32_t timeout; // timeout (absolute in blocks) for timelock part
 
     CICXSubmitDFCHTLC()
         : offerTx(uint256())
         , amount(0)
-        , receiveAddress()
-        , receivePubkey()
         , hash()
         , timeout(MINIMUM_TIMEOUT)
     {}
-
-    virtual ~CICXSubmitDFCHTLC() = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -223,8 +195,6 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(offerTx);
         READWRITE(amount);
-        READWRITE(receiveAddress);
-        READWRITE(receivePubkey);
         READWRITE(hash);
         READWRITE(timeout);
     }
@@ -233,17 +203,13 @@ public:
 class CICXSubmitDFCHTLCImplemetation : public CICXSubmitDFCHTLC
 {
 public:
-    //! tx related properties
     uint256 creationTx;
     int32_t creationHeight;
 
     CICXSubmitDFCHTLCImplemetation()
         : CICXSubmitDFCHTLC()
-        , creationTx()
         , creationHeight(-1)
     {}
-
-    ~CICXSubmitDFCHTLCImplemetation() override = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -275,26 +241,17 @@ public:
 
 
     // This tx is acceptance of the offer and evidence of HTLC on external chain in the same time. It is a CustomTx on DFC chain
-    //! basic properties
     uint256 offerTx; // txid for which offer is this HTLC
     CAmount amount;
-    CScript receiveAddress;
     uint256 hash;
     std::string htlcscriptAddress;
     CPubKey ownerPubkey;
     uint32_t timeout;
 
     CICXSubmitEXTHTLC()
-        : offerTx(uint256())
-        , amount(0)
-        , receiveAddress()
-        , hash()
-        , htlcscriptAddress()
-        , ownerPubkey()
+        : amount(0)
         , timeout(0)
     {}
-
-    virtual ~CICXSubmitEXTHTLC() = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -302,7 +259,6 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(offerTx);
         READWRITE(amount);
-        READWRITE(receiveAddress);
         READWRITE(hash);
         READWRITE(htlcscriptAddress);
         READWRITE(ownerPubkey);
@@ -313,17 +269,13 @@ public:
 class CICXSubmitEXTHTLCImplemetation : public CICXSubmitEXTHTLC
 {
 public:
-    //! tx related properties
     uint256 creationTx;
     int32_t creationHeight;
 
     CICXSubmitEXTHTLCImplemetation()
         : CICXSubmitEXTHTLC()
-        , creationTx()
         , creationHeight(-1)
     {}
-
-    ~CICXSubmitEXTHTLCImplemetation() override = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -348,16 +300,11 @@ struct CICXSubmitEXTHTLCMessage : public CICXSubmitEXTHTLC {
 class CICXClaimDFCHTLC
 {
 public:
-    //! basic properties
     uint256 dfchtlcTx; // txid of claiming DFC HTLC
     std::vector<unsigned char> seed; // secret for the hash to claim htlc
 
     CICXClaimDFCHTLC()
-        : dfchtlcTx(uint256())
-        , seed()
     {}
-
-    virtual ~CICXClaimDFCHTLC() = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -371,17 +318,13 @@ public:
 class CICXClaimDFCHTLCImplemetation : public CICXClaimDFCHTLC
 {
 public:
-    //! tx related properties
     uint256 creationTx;
     int32_t creationHeight;
 
     CICXClaimDFCHTLCImplemetation()
         : CICXClaimDFCHTLC()
-        , creationTx()
         , creationHeight(-1)
     {}
-
-    ~CICXClaimDFCHTLCImplemetation() override = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -406,14 +349,10 @@ struct CICXClaimDFCHTLCMessage : public CICXClaimDFCHTLC {
 class CICXCloseOrder
 {
 public:
-    //! basic properties
     uint256 orderTx; //txid of order which will be closed
 
     CICXCloseOrder()
-        : orderTx(uint256())
     {}
-
-    virtual ~CICXCloseOrder() = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -426,17 +365,13 @@ public:
 class CICXCloseOrderImplemetation : public CICXCloseOrder
 {
 public:
-    //! tx related properties
     uint256 creationTx;
     int32_t creationHeight;
 
     CICXCloseOrderImplemetation()
         : CICXCloseOrder()
-        , creationTx()
         , creationHeight(-1)
     {}
-
-    ~CICXCloseOrderImplemetation() override = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -461,14 +396,10 @@ struct CICXCloseOrderMessage : public CICXCloseOrder {
 class CICXCloseOffer
 {
 public:
-    //! basic properties
     uint256 offerTx; //txid of offer which will be closed
 
     CICXCloseOffer()
-        : offerTx(uint256())
     {}
-
-    virtual ~CICXCloseOffer() = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -481,17 +412,13 @@ public:
 class CICXCloseOfferImplemetation : public CICXCloseOffer
 {
 public:
-    //! tx related properties
     uint256 creationTx;
     int32_t creationHeight;
 
     CICXCloseOfferImplemetation()
         : CICXCloseOffer()
-        , creationTx()
         , creationHeight(-1)
     {}
-
-    ~CICXCloseOfferImplemetation() override = default;
 
     ADD_SERIALIZE_METHODS;
 
@@ -516,11 +443,8 @@ struct CICXCloseOfferMessage : public CICXCloseOffer {
 class CICXOrderView : public virtual CStorageView {
 public:
     static const CAmount DEFAULT_DFI_BTC_PRICE;
-    static const std::string ICX_DFIBTC_POOLPAIR;
-    static const std::string ICX_TAKERFEE_PER_BTC;
 
-    typedef std::pair<DCT_ID,std::string> AssetPair;
-    typedef std::pair<AssetPair,uint256> OrderKey;
+    typedef std::pair<DCT_ID,uint256> OrderKey;
     typedef std::pair<uint256,uint256> TxidPairKey;
     typedef std::pair<uint32_t,uint256> StatusKey;
 
@@ -537,8 +461,8 @@ public:
     Res ICXCreateOrder(CICXOrderImpl const & order);
     Res ICXUpdateOrder(CICXOrderImpl const & order);
     Res ICXCloseOrderTx(CICXOrderImpl const & order, uint8_t const);
-    void ForEachICXOrderOpen(std::function<bool (OrderKey const &, uint8_t)> callback, AssetPair const & pair = AssetPair());
-    void ForEachICXOrderClose(std::function<bool (OrderKey const &, uint8_t)> callback, AssetPair const & pair = AssetPair());
+    void ForEachICXOrderOpen(std::function<bool (OrderKey const &, uint8_t)> callback, DCT_ID const & pair = {0});
+    void ForEachICXOrderClose(std::function<bool (OrderKey const &, uint8_t)> callback, DCT_ID const & pair = {0});
     void ForEachICXOrderExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
 
     //MakeOffer
