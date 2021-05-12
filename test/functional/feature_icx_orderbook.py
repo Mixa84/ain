@@ -198,6 +198,7 @@ class ICXOrderbookTest (DefiTestFramework):
         assert_equal(hltcs[dfhtlcTx]["status"], 'OPEN')
         assert_equal(hltcs[dfhtlcTx]["offerTx"], offerTx)
         assert_equal(hltcs[dfhtlcTx]["amount"], Decimal('10.00000000'))
+        assert_equal(hltcs[dfhtlcTx]["amountInEXTAsset"], Decimal('0.10000000'))
         assert_equal(hltcs[dfhtlcTx]["hash"], '957fc0fd643f605b2938e0631a61529fd70bd35b2162a21d978c41e5241a5220')
         assert_equal(hltcs[dfhtlcTx]["timeout"], 500)
 
@@ -219,6 +220,7 @@ class ICXOrderbookTest (DefiTestFramework):
         assert_equal(hltcs[exthtlcTx]["status"], 'OPEN')
         assert_equal(hltcs[exthtlcTx]["offerTx"], offerTx)
         assert_equal(hltcs[exthtlcTx]["amount"], Decimal('0.10000000'))
+        assert_equal(hltcs[exthtlcTx]["amountInDFCAsset"], Decimal('10.00000000'))
         assert_equal(hltcs[exthtlcTx]["hash"], '957fc0fd643f605b2938e0631a61529fd70bd35b2162a21d978c41e5241a5220')
         assert_equal(hltcs[exthtlcTx]["htlcScriptAddress"], '13sJQ9wBWh8ssihHUgAaCmNWJbBAG5Hr9N')
         assert_equal(hltcs[exthtlcTx]["ownerPubkey"], '036494e7c9467c8c7ff3bf29e841907fb0fa24241866569944ea422479ec0e6252')
@@ -309,6 +311,7 @@ class ICXOrderbookTest (DefiTestFramework):
         assert_equal(hltcs[dfhtlcTx]["status"], 'OPEN')
         assert_equal(hltcs[dfhtlcTx]["offerTx"], offerTx)
         assert_equal(hltcs[dfhtlcTx]["amount"], Decimal('5.00000000'))
+        assert_equal(hltcs[dfhtlcTx]["amountInEXTAsset"], Decimal('0.05000000'))
         assert_equal(hltcs[dfhtlcTx]["hash"], '957fc0fd643f605b2938e0631a61529fd70bd35b2162a21d978c41e5241a5220')
         assert_equal(hltcs[dfhtlcTx]["timeout"], 500)
 
@@ -330,6 +333,7 @@ class ICXOrderbookTest (DefiTestFramework):
         assert_equal(hltcs[exthtlcTx]["status"], 'OPEN')
         assert_equal(hltcs[exthtlcTx]["offerTx"], offerTx)
         assert_equal(hltcs[exthtlcTx]["amount"], Decimal('0.05000000'))
+        assert_equal(hltcs[exthtlcTx]["amountInDFCAsset"], Decimal('5.00000000'))
         assert_equal(hltcs[exthtlcTx]["hash"], '957fc0fd643f605b2938e0631a61529fd70bd35b2162a21d978c41e5241a5220')
         assert_equal(hltcs[exthtlcTx]["htlcScriptAddress"], '13sJQ9wBWh8ssihHUgAaCmNWJbBAG5Hr9N')
         assert_equal(hltcs[exthtlcTx]["ownerPubkey"], '036494e7c9467c8c7ff3bf29e841907fb0fa24241866569944ea422479ec0e6252')
