@@ -1228,9 +1228,8 @@ public:
         CScript srcAddr;
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
-            const Coin& auth = coins.AccessCoin(COutPoint(order->creationTx, 1)); // always n=1 output
             // check auth
-            if (!HasAuth(auth.out.scriptPubKey)) {
+            if (!HasAuth(order->ownerAddress)) {
                 return Res::Err("tx must have at least one input from order owner");
             }
 
@@ -1256,9 +1255,8 @@ public:
         }
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
-            const Coin& auth = coins.AccessCoin(COutPoint(offer->creationTx, 1)); // always n=1 output
             // check auth
-            if (!HasAuth(auth.out.scriptPubKey)) {
+            if (!HasAuth(offer->ownerAddress)) {
                 return Res::Err("tx must have at least one input from offer owner");
             }
 
@@ -1299,9 +1297,8 @@ public:
 
         if (order->orderType == CICXOrder::TYPE_INTERNAL)
         {
-            const Coin& auth = coins.AccessCoin(COutPoint(offer->creationTx, 1)); // always n=1 output
             // check auth
-            if (!HasAuth(auth.out.scriptPubKey)) {
+            if (!HasAuth(offer->ownerAddress)) {
                 return Res::Err("tx must have at least one input from offer owner");
             }
 
@@ -1311,9 +1308,8 @@ public:
         }
         else if (order->orderType == CICXOrder::TYPE_EXTERNAL)
         {
-            const Coin& auth = coins.AccessCoin(COutPoint(order->creationTx, 1)); // always n=1 output
             // check auth
-            if (!HasAuth(auth.out.scriptPubKey)) {
+            if (!HasAuth(order->ownerAddress)) {
                 return Res::Err("tx must have at least one input from order owner");
             }
 
@@ -1467,9 +1463,8 @@ public:
             return Res::Err("order with creation tx %s is already closed!", closeorder.orderTx.GetHex());
         }
 
-        const Coin& auth = coins.AccessCoin(COutPoint(order->creationTx, 1)); // always n=1 output
         // check auth
-        if (!HasAuth(auth.out.scriptPubKey)) {
+        if (!HasAuth(order->ownerAddress)) {
             return Res::Err("tx must have at least one input from order owner");
         }
 
@@ -1516,7 +1511,7 @@ public:
 
         const Coin& auth = coins.AccessCoin(COutPoint(offer->creationTx, 1)); // always n=1 output
         // check auth
-        if (!HasAuth(auth.out.scriptPubKey))
+        if (!HasAuth(offer->ownerAddress))
             return Res::Err("tx must have at least one input from offer owner");
 
         offer->closeTx = closeoffer.creationTx;
