@@ -448,8 +448,8 @@ public:
     }
 
     Res CheckICXTx() const {
-        if (tx.vout.size() != 2) {
-            return Res::Err("malformed tx vouts ((wrong number of vouts)");
+        if (tx.vout[0].nValue != 0) {
+            return Res::Err("malformed tx vouts, first vout must be OP_RETURN vout with value 0");
         }
         return Res::Ok();
     }
