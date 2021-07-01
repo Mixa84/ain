@@ -411,6 +411,8 @@ public:
     void ForEachICXSubmitDFCHTLCClose(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
     void ForEachICXSubmitDFCHTLCExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
     std::unique_ptr<CICXSubmitDFCHTLCImpl> HasICXSubmitDFCHTLCOpen(uint256 const & offertxid);
+    bool ExistedICXSubmitDFCHTLC(uint256 const & offertxid);
+
 
     //SubmitEXTHTLC
     std::unique_ptr<CICXSubmitEXTHTLCImpl> GetICXSubmitEXTHTLCByCreationTx(uint256 const & txid) const;
@@ -420,6 +422,7 @@ public:
     void ForEachICXSubmitEXTHTLCClose(std::function<bool (TxidPairKey const &, uint8_t)> callback, uint256 const & offertxid = uint256());
     void ForEachICXSubmitEXTHTLCExpire(std::function<bool (StatusKey const &, uint8_t)> callback, uint32_t const & height = 0);
     std::unique_ptr<CICXSubmitEXTHTLCImpl> HasICXSubmitEXTHTLCOpen(uint256 const & offertxid);
+    bool ExistedICXSubmitEXTHTLC(uint256 const & offertxid);
 
     //ClaimDFCHTLC
     std::unique_ptr<CICXClaimDFCHTLCImpl> GetICXClaimDFCHTLCByCreationTx(uint256 const & txid) const;
