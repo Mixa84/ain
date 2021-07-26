@@ -312,6 +312,13 @@ public:
         if (obj.activateAfterBlock) rpcInfo.pushKV("activateAfterBlock", static_cast<int>(obj.activateAfterBlock));
     }
 
+    void operator()(const CLoanSetGenTokenMessage& obj) const {
+        rpcInfo.pushKV("symbol", obj.symbol);
+        rpcInfo.pushKV("name", obj.name);
+        rpcInfo.pushKV("priceFeedTxid", obj.priceFeedTxid.GetHex());
+        rpcInfo.pushKV("mintable", obj.mintable);
+    }
+
     void operator()(const CCreateLoanSchemeMessage& obj) const {
         rpcInfo.pushKV("identifier", obj.identifier);
         rpcInfo.pushKV("ratio", static_cast<uint64_t>(obj.ratio));

@@ -3,6 +3,7 @@
 const unsigned char CLoanView::LoanSetCollateralTokenCreationTx           ::prefix = 0x10;
 const unsigned char CLoanView::LoanSetCollateralTokenKey                  ::prefix = 0x11;
 const unsigned char CLoanView::CreateLoanSchemeKey                        ::prefix = 0x12;
+const unsigned char CLoanView::LoanSetGenTokenCreationTx                  ::prefix = 0x13;
 
 std::unique_ptr<CLoanView::CLoanSetCollateralTokenImpl> CLoanView::GetLoanSetCollateralToken(uint256 const & txid) const
 {
@@ -42,6 +43,25 @@ std::unique_ptr<CLoanView::CLoanSetCollateralTokenImpl> CLoanView::HasLoanSetCol
     if (it.Valid())
         return GetLoanSetCollateralToken(it.Value());
     return {};
+}
+
+std::unique_ptr<CLoanView::CLoanSetGenTokenImpl> CLoanView::GetLoanSetGenToken(uint256 const & txid) const
+{
+    auto collToken = ReadBy<LoanSetGenTokenCreationTx,CLoanSetGenTokenImpl>(txid);
+    if (collToken)
+        return MakeUnique<CLoanSetGenTokenImpl>(*collToken);
+    return {};
+}
+
+Res CLoanView::LoanCreateSetGenToken(CLoanSetGenTokenImpl const & genToken)
+{
+    //this should not happen, but for sure
+    if (GetLoanSetCollateralToken(genToken.creationTx))
+        return Res::Err("setGenToken with creation tx %s already exists!", genToken.creationTx.GetHex());
+
+    WriteBy<LoanSetGenTokenCreationTx>(genToken.creationTx, genToken);
+
+    return Res::Ok();
 }
 
 Res CLoanView::StoreLoanScheme(const CCreateLoanSchemeMessage& loanScheme)

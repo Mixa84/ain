@@ -232,6 +232,8 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "setcollateraltoken", 0, "parameters" },
     { "setcollateraltoken", 1, "inputs" },
     { "getcollateraltoken", 0, "by" },
+    { "setgentoken", 0, "parameters" },
+    { "setgentoken", 1, "inputs" },
     { "createloanscheme", 0, "ratio" },
     { "createloanscheme", 1, "rate" },
 

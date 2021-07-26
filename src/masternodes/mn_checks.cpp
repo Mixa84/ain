@@ -57,6 +57,7 @@ std::string ToString(CustomTxType type) {
         case CustomTxType::ICXCloseOrder:       return "ICXCloseOrder";
         case CustomTxType::ICXCloseOffer:       return "ICXCloseOffer";
         case CustomTxType::LoanSetCollateralToken: return "LoanSetCollateralToken";
+        case CustomTxType::LoanSetGenToken:     return "LoanSetGenToken";
         case CustomTxType::CreateLoanScheme:    return "CreateLoanScheme";
         case CustomTxType::None:                return "None";
     }
@@ -134,6 +135,7 @@ CCustomTxMessage customTypeToMessage(CustomTxType txType) {
         case CustomTxType::ICXCloseOrder:           return CICXCloseOrderMessage{};
         case CustomTxType::ICXCloseOffer:           return CICXCloseOfferMessage{};
         case CustomTxType::LoanSetCollateralToken:  return CLoanSetCollateralTokenMessage{};
+        case CustomTxType::LoanSetGenToken:         return CLoanSetGenTokenMessage{};
         case CustomTxType::CreateLoanScheme:        return CCreateLoanSchemeMessage{};
         case CustomTxType::None:                    return CCustomTxMessageNone{};
     }
@@ -389,6 +391,11 @@ public:
         return !res ? res : serialize(obj);
     }
     Res operator()(CLoanSetCollateralTokenMessage& obj) const {
+        auto res = isPostFortCanningFork();
+        return !res ? res : serialize(obj);
+    }
+
+    Res operator()(CLoanSetGenTokenMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
@@ -1663,6 +1670,23 @@ public:
             return Res::Err("activateAfterBlock cannot be less than current height!");
 
         return mnview.LoanCreateSetCollateralToken(collToken);
+    }
+
+    Res operator()(const CLoanSetGenTokenMessage& obj) const {
+        auto res = CheckICXTx();
+        if (!res)
+            return res;
+
+        CLoanSetGenTokenImplementation genToken;
+        static_cast<CLoanSetGenToken&>(genToken) = obj;
+
+        genToken.creationTx = tx.GetHash();
+        genToken.creationHeight = height;
+
+        if (!mnview.GetOracleData(genToken.priceFeedTxid))
+            return Res::Err("oracle (%s) does not exist!", genToken.priceFeedTxid.GetHex());
+
+        return mnview.LoanCreateSetGenToken(genToken);
     }
 
     Res operator()(const CCreateLoanSchemeMessage& obj) const {
