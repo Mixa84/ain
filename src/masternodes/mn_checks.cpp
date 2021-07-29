@@ -58,6 +58,7 @@ std::string ToString(CustomTxType type) {
         case CustomTxType::ICXCloseOffer:       return "ICXCloseOffer";
         case CustomTxType::LoanSetCollateralToken: return "LoanSetCollateralToken";
         case CustomTxType::LoanSetLoanToken:     return "LoanSetLoanToken";
+        case CustomTxType::LoanUpdateLoanToken:     return "LoanUpdateLoanToken";
         case CustomTxType::CreateLoanScheme:    return "CreateLoanScheme";
         case CustomTxType::None:                return "None";
     }
@@ -136,6 +137,7 @@ CCustomTxMessage customTypeToMessage(CustomTxType txType) {
         case CustomTxType::ICXCloseOffer:           return CICXCloseOfferMessage{};
         case CustomTxType::LoanSetCollateralToken:  return CLoanSetCollateralTokenMessage{};
         case CustomTxType::LoanSetLoanToken:        return CLoanSetLoanTokenMessage{};
+        case CustomTxType::LoanUpdateLoanToken:     return CLoanUpdateLoanTokenMessage{};
         case CustomTxType::CreateLoanScheme:        return CCreateLoanSchemeMessage{};
         case CustomTxType::None:                    return CCustomTxMessageNone{};
     }
@@ -396,6 +398,11 @@ public:
     }
 
     Res operator()(CLoanSetLoanTokenMessage& obj) const {
+        auto res = isPostFortCanningFork();
+        return !res ? res : serialize(obj);
+    }
+
+    Res operator()(CLoanUpdateLoanTokenMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
@@ -1687,11 +1694,11 @@ public:
             return Res::Err("oracle (%s) does not exist!", loanToken.priceFeedTxid.GetHex());
 
         CTokenImplementation token;
-        token.flags = (uint8_t)CToken::TokenFlags::Tradeable | (uint8_t)CToken::TokenFlags::LoanToken;
-        token.flags = loanToken.mintable ? token.flags | (uint8_t)CToken::TokenFlags::Mintable : token.flags;
+        token.flags = loanToken.mintable ? (uint8_t)CToken::TokenFlags::Default : (uint8_t)CToken::TokenFlags::Tradeable;
+        token.flags |= (uint8_t)CToken::TokenFlags::LoanToken;
 
+        token.symbol = trim_ws(loanToken.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
         token.name = trim_ws(loanToken.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
-        token.symbol = loanToken.symbol;
         token.creationTx = tx.GetHash();
         token.creationHeight = height;
 
@@ -1700,7 +1707,37 @@ public:
             return std::move(tokenId);
         }
 
-        return mnview.LoanCreateSetLoanToken(loanToken, tokenId);
+        return mnview.LoanSetLoanToken(loanToken, tokenId);
+    }
+
+    Res operator()(const CLoanUpdateLoanTokenMessage& obj) const {
+        auto res = CheckICXTx();
+        if (!res)
+            return res;
+
+        CLoanSetLoanTokenImplementation loanToken;
+        static_cast<CLoanSetLoanToken&>(loanToken) = obj;
+
+        loanToken.creationTx = tx.GetHash();
+        loanToken.creationHeight = height;
+
+        if (!mnview.GetOracleData(loanToken.priceFeedTxid))
+            return Res::Err("oracle (%s) does not exist!", loanToken.priceFeedTxid.GetHex());
+
+        auto token = pcustomcsview->GetTokenByCreationTx(obj.tokenTx);
+
+        if (loanToken.symbol != token->second.symbol)
+            token->second.symbol = trim_ws(loanToken.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);;
+        if (loanToken.name != token->second.name)
+            token->second.name = trim_ws(loanToken.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
+        if (loanToken.mintable != token->second.flags && (uint8_t)CToken::TokenFlags::Mintable)
+            token->second.flags ^= (uint8_t)CToken::TokenFlags::Mintable;
+
+        res = mnview.UpdateToken(token->second.creationTx, static_cast<CToken>(token->second), false);
+        if (!res)
+            return res;
+
+        return mnview.LoanUpdateLoanToken(loanToken, token->first);
     }
 
     Res operator()(const CCreateLoanSchemeMessage& obj) const {

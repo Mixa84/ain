@@ -63,7 +63,7 @@ std::unique_ptr<CLoanView::CLoanSetLoanTokenImpl> CLoanView::GetLoanSetLoanToken
     return {};
 }
 
-Res CLoanView::LoanCreateSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id)
+Res CLoanView::LoanSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id)
 {
     //this should not happen, but for sure
     if (GetLoanSetCollateralToken(loanToken.creationTx))
@@ -72,8 +72,21 @@ Res CLoanView::LoanCreateSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, D
     if (loanToken.interest < 0)
         return Res::Err("interest rate must be positive number!");
 
-    WriteBy<LoanSetLoanTokenCreationTx>(loanToken.creationTx, loanToken);
-    WriteBy<LoanSetLoanTokenByID>(id, loanToken.creationTx);
+    WriteBy<LoanSetLoanTokenByID>(id, loanToken);
+    WriteBy<LoanSetLoanTokenCreationTx>(loanToken.creationTx, id);
+
+    return Res::Ok();
+}
+
+Res CLoanView::LoanUpdateLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id)
+{
+    if (!GetLoanSetCollateralToken(loanToken.creationTx))
+        return Res::Err("setLoanToken with creation tx %s doesn't exists!", loanToken.creationTx.GetHex());
+
+    if (loanToken.interest < 0)
+        return Res::Err("interest rate must be positive number!");
+
+    WriteBy<LoanSetLoanTokenByID>(id, loanToken);
 
     return Res::Ok();
 }

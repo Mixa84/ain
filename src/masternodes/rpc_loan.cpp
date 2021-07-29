@@ -411,14 +411,14 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
         if (id == DCT_ID{0}) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Can't alter DFI token!"));
         }
-        if (!token) {
+        loanToken = pcustomcsview->GetLoanSetLoanTokenByID(id);
+        if (!token || !loanToken) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenStr));
         }
         tokenImpl = static_cast<CTokenImplementation const& >(*token);
         if (tokenImpl.IsLoanToken()) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s is not a loan token! Can't alter other tokens with this tx!", tokenStr));
         }
-        loanToken = pcustomcsview->GetLoanSetLoanTokenByID(id);
 
         targetHeight = ::ChainActive().Height() + 1;
     }
@@ -435,8 +435,8 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
         loanToken->interest = AmountFromValue(metaObj["interest"]);
 
     CDataStream metadata(DfTxMarker, SER_NETWORK, PROTOCOL_VERSION);
-    metadata << static_cast<unsigned char>(CustomTxType::LoanSetLoanToken)
-             << *loanToken;
+    metadata << static_cast<unsigned char>(CustomTxType::LoanUpdateLoanToken)
+             << loanToken->creationTx << static_cast<CLoanSetLoanToken>(*loanToken);
 
     CScript scriptMeta;
     scriptMeta << OP_RETURN << ToByteVector(metadata);
@@ -467,7 +467,7 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
         if (optAuthTx)
             AddCoins(coinview, *optAuthTx, targetHeight);
         const auto metadata = ToByteVector(CDataStream{SER_NETWORK, PROTOCOL_VERSION, *loanToken});
-        execTestTx(CTransaction(rawTx), targetHeight, metadata, CLoanSetLoanTokenMessage{}, coinview);
+        execTestTx(CTransaction(rawTx), targetHeight, metadata, CLoanUpdateLoanTokenMessage{}, coinview);
     }
 
     return signsend(rawTx, pwallet, optAuthTx)->GetHash().GetHex();

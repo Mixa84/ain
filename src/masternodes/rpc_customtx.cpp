@@ -319,6 +319,14 @@ public:
         rpcInfo.pushKV("mintable", obj.mintable);
     }
 
+    void operator()(const CLoanUpdateLoanTokenMessage& obj) const {
+        rpcInfo.pushKV("tokenTx", obj.tokenTx.GetHex());
+        rpcInfo.pushKV("symbol", obj.symbol);
+        rpcInfo.pushKV("name", obj.name);
+        rpcInfo.pushKV("priceFeedTxid", obj.priceFeedTxid.GetHex());
+        rpcInfo.pushKV("mintable", obj.mintable);
+    }
+
     void operator()(const CCreateLoanSchemeMessage& obj) const {
         rpcInfo.pushKV("identifier", obj.identifier);
         rpcInfo.pushKV("ratio", static_cast<uint64_t>(obj.ratio));

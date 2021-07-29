@@ -99,6 +99,18 @@ struct CLoanSetLoanTokenMessage : public CLoanSetLoanToken {
     }
 };
 
+struct CLoanUpdateLoanTokenMessage : public CLoanSetLoanToken {
+    using CLoanSetLoanToken::CLoanSetLoanToken;
+
+    uint256 tokenTx;
+
+    ADD_SERIALIZE_METHODS;
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITEAS(CLoanSetLoanToken, *this);
+    }
+};
+
 struct CLoanSchemeData
 {
     uint32_t ratio;
@@ -142,7 +154,8 @@ public:
 
     std::unique_ptr<CLoanSetLoanTokenImpl> GetLoanSetLoanToken(uint256 const & txid) const;
     std::unique_ptr<CLoanSetLoanTokenImpl> GetLoanSetLoanTokenByID(DCT_ID const & id) const;
-    Res LoanCreateSetLoanToken(CLoanSetLoanTokenImpl const & genToken, DCT_ID const & id);
+    Res LoanSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id);
+    Res LoanUpdateLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id);
 
     Res StoreLoanScheme(const CCreateLoanSchemeMessage& loanScheme);
     void ForEachLoanScheme(std::function<bool (const std::string&, const CLoanSchemeData&)> callback);
