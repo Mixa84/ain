@@ -312,7 +312,7 @@ public:
         if (obj.activateAfterBlock) rpcInfo.pushKV("activateAfterBlock", static_cast<int>(obj.activateAfterBlock));
     }
 
-    void operator()(const CLoanSetGenTokenMessage& obj) const {
+    void operator()(const CLoanSetLoanTokenMessage& obj) const {
         rpcInfo.pushKV("symbol", obj.symbol);
         rpcInfo.pushKV("name", obj.name);
         rpcInfo.pushKV("priceFeedTxid", obj.priceFeedTxid.GetHex());

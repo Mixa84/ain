@@ -3,7 +3,8 @@
 const unsigned char CLoanView::LoanSetCollateralTokenCreationTx           ::prefix = 0x10;
 const unsigned char CLoanView::LoanSetCollateralTokenKey                  ::prefix = 0x11;
 const unsigned char CLoanView::CreateLoanSchemeKey                        ::prefix = 0x12;
-const unsigned char CLoanView::LoanSetGenTokenCreationTx                  ::prefix = 0x13;
+const unsigned char CLoanView::LoanSetLoanTokenCreationTx                 ::prefix = 0x13;
+const unsigned char CLoanView::LoanSetLoanTokenByID                       ::prefix = 0x14;
 
 std::unique_ptr<CLoanView::CLoanSetCollateralTokenImpl> CLoanView::GetLoanSetCollateralToken(uint256 const & txid) const
 {
@@ -45,21 +46,34 @@ std::unique_ptr<CLoanView::CLoanSetCollateralTokenImpl> CLoanView::HasLoanSetCol
     return {};
 }
 
-std::unique_ptr<CLoanView::CLoanSetGenTokenImpl> CLoanView::GetLoanSetGenToken(uint256 const & txid) const
+std::unique_ptr<CLoanView::CLoanSetLoanTokenImpl> CLoanView::GetLoanSetLoanToken(uint256 const & txid) const
 {
-    auto collToken = ReadBy<LoanSetGenTokenCreationTx,CLoanSetGenTokenImpl>(txid);
-    if (collToken)
-        return MakeUnique<CLoanSetGenTokenImpl>(*collToken);
+    auto loanToken = ReadBy<LoanSetLoanTokenCreationTx,CLoanSetLoanTokenImpl>(txid);
+    if (loanToken)
+        return MakeUnique<CLoanSetLoanTokenImpl>(*loanToken);
     return {};
 }
 
-Res CLoanView::LoanCreateSetGenToken(CLoanSetGenTokenImpl const & genToken)
+std::unique_ptr<CLoanView::CLoanSetLoanTokenImpl> CLoanView::GetLoanSetLoanTokenByID(DCT_ID const & id) const
+{
+    auto txid = ReadBy<LoanSetLoanTokenByID, uint256>(id);
+    auto loanToken = ReadBy<LoanSetLoanTokenCreationTx,CLoanSetLoanTokenImpl>(txid.get());
+    if (loanToken)
+        return MakeUnique<CLoanSetLoanTokenImpl>(*loanToken);
+    return {};
+}
+
+Res CLoanView::LoanCreateSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id)
 {
     //this should not happen, but for sure
-    if (GetLoanSetCollateralToken(genToken.creationTx))
-        return Res::Err("setGenToken with creation tx %s already exists!", genToken.creationTx.GetHex());
+    if (GetLoanSetCollateralToken(loanToken.creationTx))
+        return Res::Err("setLoanToken with creation tx %s already exists!", loanToken.creationTx.GetHex());
 
-    WriteBy<LoanSetGenTokenCreationTx>(genToken.creationTx, genToken);
+    if (loanToken.interest < 0)
+        return Res::Err("interest rate must be positive number!");
+
+    WriteBy<LoanSetLoanTokenCreationTx>(loanToken.creationTx, loanToken);
+    WriteBy<LoanSetLoanTokenByID>(id, loanToken.creationTx);
 
     return Res::Ok();
 }
