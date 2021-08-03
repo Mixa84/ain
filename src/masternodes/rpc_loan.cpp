@@ -267,7 +267,7 @@ UniValue setloantoken(const JSONRPCRequest& request) {
                             {"name", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Token's name (optional), no longer than " + std::to_string(CToken::MAX_TOKEN_NAME_LENGTH)},
                             {"priceFeedId", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "txid of oracle feeding the price"},
                             {"mintable", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Token's 'Mintable' property (bool, optional), default is 'True'"},
-                            {"factor", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Interest rate (default: 0)"},
+                            {"interest", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Interest rate (default: 0)"},
                         },
                     },
                     {"inputs", RPCArg::Type::ARR, RPCArg::Optional::OMITTED_NAMED_ARG,
@@ -286,7 +286,7 @@ UniValue setloantoken(const JSONRPCRequest& request) {
                         "\"hash\"                  (string) The hex-encoded hash of broadcasted transaction\n"
                 },
                 RPCExamples{
-                        HelpExampleCli("setloantoken", R"('{"token":"XXX","factor":"150","priceFeedId":"txid"}')")
+                        HelpExampleCli("setloantoken", R"('{"symbol":"USDC","name":"USD Cake coin","priceFeedId":"txid","mintable":false,"interest":"0.03"}')")
                         },
      }.Check(request);
 
@@ -380,7 +380,7 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
                             {"name", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Token's name (optional), no longer than " + std::to_string(CToken::MAX_TOKEN_NAME_LENGTH)},
                             {"priceFeedId", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "txid of oracle feeding the price"},
                             {"mintable", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Token's 'Mintable' property (bool, optional), default is 'True'"},
-                            {"factor", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Interest rate (default: 0)"},
+                            {"interest", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Interest rate (default: 0)"},
                         },
                     },
                     {"inputs", RPCArg::Type::ARR, RPCArg::Optional::OMITTED_NAMED_ARG,
@@ -399,7 +399,7 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
                         "\"hash\"                  (string) The hex-encoded hash of broadcasted transaction\n"
                 },
                 RPCExamples{
-                        HelpExampleCli("setloantoken", R"('{"token":"XXX","factor":"150","priceFeedId":"txid"}')")
+                        HelpExampleCli("updateloantoken", R"('"token":"XXX", {"priceFeedId":"txid", "mintable": true, "interest": 0.03}')")
                         },
      }.Check(request);
 
@@ -409,7 +409,7 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
     pwallet->BlockUntilSyncedToCurrentChain();
     LockedCoinsScopedGuard lcGuard(pwallet);
 
-    RPCTypeCheck(request.params, {UniValue::VOBJ, UniValue::VARR}, false);
+    RPCTypeCheck(request.params, {UniValueType(), UniValue::VOBJ, UniValue::VARR}, false);
     if (request.params[0].isNull())
         throw JSONRPCError(RPC_INVALID_PARAMETER,
                            "Invalid parameters, arguments 0 must be non-null and expected as string with token symbol, id or creation txid");
@@ -427,15 +427,14 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
 
         DCT_ID id;
         auto token = pcustomcsview->GetTokenGuessId(tokenStr, id);
+        if (!token) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenStr));
+        }
         if (id == DCT_ID{0}) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Can't alter DFI token!"));
         }
         loanToken = pcustomcsview->GetLoanSetLoanTokenByID(id);
-        if (!token || !loanToken) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenStr));
-        }
-        tokenImpl = static_cast<CTokenImplementation const& >(*token);
-        if (tokenImpl.IsLoanToken()) {
+        if (!loanToken || !token->IsLoanToken()) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s is not a loan token! Can't alter other tokens with this tx!", tokenStr));
         }
 

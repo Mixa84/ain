@@ -352,6 +352,7 @@ UniValue tokenToJSON(DCT_ID const& id, CTokenImplementation const& token, bool v
         tokenObj.pushKV("isDAT", token.IsDAT());
         tokenObj.pushKV("isLPS", token.IsPoolShare());
         tokenObj.pushKV("finalized", token.IsFinalized());
+        tokenObj.pushKV("isLoanToken", token.IsLoanToken());
 
         tokenObj.pushKV("minted", ValueFromAmount(token.minted));
         tokenObj.pushKV("creationTx", token.creationTx.ToString());

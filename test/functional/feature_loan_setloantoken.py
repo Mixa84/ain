@@ -52,7 +52,7 @@ class LoanSetLoanTokenTest (DefiTestFramework):
         self.nodes[0].generate(1)
         self.sync_blocks()
 
-        self.nodes[0].setloantoken({
+        setLoanTokenTx = self.nodes[0].setloantoken({
                             'symbol': "USDC",
                             'name': "USD Cake stablecoin",
                             'priceFeedId': oracle_id1,
@@ -62,7 +62,37 @@ class LoanSetLoanTokenTest (DefiTestFramework):
         self.nodes[0].generate(1)
         self.sync_blocks()
 
-        print(self.nodes[0].listloantokens())
+        loantokens = self.nodes[0].listloantokens()
+
+        print(loantokens)
+
+        assert_equal(len(loantokens), 1)
+        tokenId = list(loantokens[setLoanTokenTx]["token"])[0]
+        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["symbol"], "USDC")
+        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["name"], "USD Cake stablecoin")
+        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["mintable"], False)
+        assert_equal(loantokens[setLoanTokenTx]["priceFeedId"], oracle_id1)
+        assert_equal(loantokens[setLoanTokenTx]["interest"], Decimal(0))
+
+        updateLoanTokenTx = self.nodes[0].updateloantoken("USDC",{
+                            'symbol': "USDCAKE",
+                            'name': "USD Cake coin",
+                            'priceFeedId': oracle_id1,
+                            'mintable': True,
+                            'interest': 0.05})
+
+        self.nodes[0].generate(1)
+        self.sync_blocks()
+
+        loantokens = self.nodes[0].listloantokens()
+
+        assert_equal(len(loantokens), 1)
+        tokenId = list(loantokens[updateLoanTokenTx]["token"])[0]
+        assert_equal(loantokens[updateLoanTokenTx]["token"][tokenId]["symbol"], "USDCAKE")
+        assert_equal(loantokens[updateLoanTokenTx]["token"][tokenId]["name"], "USD Cake coin")
+        assert_equal(loantokens[updateLoanTokenTx]["token"][tokenId]["mintable"], True)
+        assert_equal(loantokens[updateLoanTokenTx]["priceFeedId"], oracle_id1)
+        assert_equal(loantokens[updateLoanTokenTx]["interest"], Decimal(0.05))
 
 if __name__ == '__main__':
     LoanSetLoanTokenTest().main()
