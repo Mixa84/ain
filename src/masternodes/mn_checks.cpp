@@ -59,7 +59,10 @@ std::string ToString(CustomTxType type) {
         case CustomTxType::LoanSetCollateralToken: return "LoanSetCollateralToken";
         case CustomTxType::LoanSetLoanToken:     return "LoanSetLoanToken";
         case CustomTxType::LoanUpdateLoanToken:     return "LoanUpdateLoanToken";
-        case CustomTxType::CreateLoanScheme:    return "CreateLoanScheme";
+        case CustomTxType::LoanScheme:          return "LoanScheme";
+        case CustomTxType::DefaultLoanScheme:   return "DefaultLoanScheme";
+        case CustomTxType::DestroyLoanScheme:   return "DestroyLoanScheme";
+        case CustomTxType::Vault:               return "Vault";
         case CustomTxType::None:                return "None";
     }
     return "None";
@@ -138,7 +141,10 @@ CCustomTxMessage customTypeToMessage(CustomTxType txType) {
         case CustomTxType::LoanSetCollateralToken:  return CLoanSetCollateralTokenMessage{};
         case CustomTxType::LoanSetLoanToken:        return CLoanSetLoanTokenMessage{};
         case CustomTxType::LoanUpdateLoanToken:     return CLoanUpdateLoanTokenMessage{};
-        case CustomTxType::CreateLoanScheme:        return CCreateLoanSchemeMessage{};
+        case CustomTxType::LoanScheme:              return CLoanSchemeMessage{};
+        case CustomTxType::DefaultLoanScheme:       return CDefaultLoanSchemeMessage{};
+        case CustomTxType::DestroyLoanScheme:       return CDestroyLoanSchemeMessage{};
+        case CustomTxType::Vault:                   return CVaultMessage{};
         case CustomTxType::None:                    return CCustomTxMessageNone{};
     }
     return CCustomTxMessageNone{};
@@ -176,6 +182,13 @@ class CCustomMetadataParseVisitor : public boost::static_visitor<Res>
     Res isPostEunosFork() const {
         if(static_cast<int>(height) < consensus.EunosHeight) {
             return Res::Err("called before Eunos height");
+        }
+        return Res::Ok();
+    }
+
+    Res isPostEunosPayaFork() const {
+        if(static_cast<int>(height) < consensus.EunosPayaHeight) {
+            return Res::Err("called before EunosPaya height");
         }
         return Res::Ok();
     }
@@ -392,22 +405,38 @@ public:
         auto res = isPostEunosFork();
         return !res ? res : serialize(obj);
     }
+    
     Res operator()(CLoanSetCollateralTokenMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
 
     Res operator()(CLoanSetLoanTokenMessage& obj) const {
+            auto res = isPostFortCanningFork();
+        return !res ? res : serialize(obj);
+    }
+    
+    Res operator()(CLoanSchemeMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
-
+    
     Res operator()(CLoanUpdateLoanTokenMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
+    
+    Res operator()(CDefaultLoanSchemeMessage& obj) const {
+        auto res = isPostFortCanningFork();
+        return !res ? res : serialize(obj);
+    }
 
-    Res operator()(CCreateLoanSchemeMessage& obj) const {
+    Res operator()(CDestroyLoanSchemeMessage& obj) const {
+        auto res = isPostFortCanningFork();
+        return !res ? res : serialize(obj);
+    }
+
+    Res operator()(CVaultMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
@@ -482,8 +511,11 @@ public:
     }
 
     Res CheckICXTx() const {
-        if (tx.vout.size() != 2) {
+        if (static_cast<int>(height) < consensus.EunosPayaHeight && tx.vout.size() != 2) {
             return Res::Err("malformed tx vouts ((wrong number of vouts)");
+        }
+        if (static_cast<int>(height) >= consensus.EunosPayaHeight && tx.vout[0].nValue != 0) {
+            return Res::Err("malformed tx vouts, first vout must be OP_RETURN vout with value 0");
         }
         return Res::Ok();
     }
@@ -711,6 +743,19 @@ public:
             return Res::Err("masternode creation needs owner auth");
         }
 
+        if (height >= static_cast<uint32_t>(Params().GetConsensus().EunosPayaHeight)) {
+            switch(obj.timelock) {
+                case CMasternode::ZEROYEAR:
+                case CMasternode::FIVEYEAR:
+                case CMasternode::TENYEAR:
+                    break;
+                default:
+                    return Res::Err("Timelock must be set to either 0, 5 or 10 years");
+            }
+        } else if (obj.timelock != 0) {
+            return Res::Err("collateral timelock cannot be set below EunosPaya");
+        }
+
         CMasternode node;
         CTxDestination dest;
         if (ExtractDestination(tx.vout[1].scriptPubKey, dest)) {
@@ -725,10 +770,16 @@ public:
         node.creationHeight = height;
         node.operatorType = obj.operatorType;
         node.operatorAuthAddress = obj.operatorAuthAddress;
-        res = mnview.CreateMasternode(tx.GetHash(), node);
+        res = mnview.CreateMasternode(tx.GetHash(), node, obj.timelock);
         // Build coinage from the point of masternode creation
-        if (res && height >= static_cast<uint32_t>(Params().GetConsensus().DakotaCrescentHeight)) {
-            mnview.SetMasternodeLastBlockTime(node.operatorAuthAddress, static_cast<uint32_t>(height), time);
+        if (res) {
+            if (height >= static_cast<uint32_t>(Params().GetConsensus().EunosPayaHeight)) {
+                for (uint8_t i{0}; i < SUBNODE_COUNT; ++i) {
+                    mnview.SetSubNodesBlockTime(node.operatorAuthAddress, static_cast<uint32_t>(height), i, time);
+                }
+            } else if (height >= static_cast<uint32_t>(Params().GetConsensus().DakotaCrescentHeight)) {
+                mnview.SetMasternodeLastBlockTime(node.operatorAuthAddress, static_cast<uint32_t>(height), time);
+            }
         }
         return res;
     }
@@ -1231,6 +1282,11 @@ public:
         if (!order)
             return Res::Err("order with creation tx " + makeoffer.orderTx.GetHex() + " does not exists!");
 
+        auto expiry = static_cast<int>(height) < consensus.EunosPayaHeight ? CICXMakeOffer::DEFAULT_EXPIRY : CICXMakeOffer::EUNOSPAYA_DEFAULT_EXPIRY;
+
+        if (makeoffer.expiry < expiry)
+            return Res::Err("offer expiry must be greater than %d!", expiry - 1);
+
         CScript txidAddr(makeoffer.creationTx.begin(), makeoffer.creationTx.end());
 
         if (order->orderType == CICXOrder::TYPE_INTERNAL) {
@@ -1288,20 +1344,38 @@ public:
             if (!mnview.HasICXMakeOfferOpen(offer->orderTx, submitdfchtlc.offerTx))
                 return Res::Err("offerTx (%s) has expired", submitdfchtlc.offerTx.GetHex());
 
-            if (submitdfchtlc.timeout < CICXSubmitDFCHTLC::MINIMUM_TIMEOUT)
-                return Res::Err("timeout must be greater than %d", CICXSubmitDFCHTLC::MINIMUM_TIMEOUT - 1);
+            uint32_t timeout;
+            if (static_cast<int>(height) < consensus.EunosPayaHeight)
+                timeout = CICXSubmitDFCHTLC::MINIMUM_TIMEOUT;
+            else
+                timeout = CICXSubmitDFCHTLC::EUNOSPAYA_MINIMUM_TIMEOUT;
+
+            if (submitdfchtlc.timeout < timeout)
+                return Res::Err("timeout must be greater than %d", timeout - 1);
 
             srcAddr = CScript(order->creationTx.begin(), order->creationTx.end());
+
+            CScript offerTxidAddr(offer->creationTx.begin(), offer->creationTx.end());
 
             CAmount calcAmount(static_cast<CAmount>((arith_uint256(submitdfchtlc.amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
             if (calcAmount > offer->amount)
                 return Res::Err("amount must be lower or equal the offer one");
 
-            CScript offerTxidAddr(offer->creationTx.begin(), offer->creationTx.end());
-
-            //calculating adjusted takerFee
-            CAmount BTCAmount(static_cast<CAmount>((arith_uint256(submitdfchtlc.amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
-            auto takerFee = CalculateTakerFee(BTCAmount);
+            CAmount takerFee = offer->takerFee;
+            //EunosPaya: calculating adjusted takerFee only if amount in htlc different than in offer
+            if (static_cast<int>(height) >= consensus.EunosPayaHeight)
+            {
+                if (calcAmount < offer->amount)
+                {
+                    CAmount BTCAmount(static_cast<CAmount>((arith_uint256(submitdfchtlc.amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
+                    takerFee = static_cast<CAmount>((arith_uint256(BTCAmount) * arith_uint256(offer->takerFee) / arith_uint256(offer->amount)).GetLow64());
+                }
+            }
+            else
+            {
+                CAmount BTCAmount(static_cast<CAmount>((arith_uint256(submitdfchtlc.amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
+                takerFee = CalculateTakerFee(BTCAmount);
+            }
 
             // refund the rest of locked takerFee if there is difference
             if (offer->takerFee - takerFee) {
@@ -1346,10 +1420,22 @@ public:
                 return Res::Err("Invalid hash, dfc htlc hash is different than extarnal htlc hash - %s != %s",
                         submitdfchtlc.hash.GetHex(),exthtlc->hash.GetHex());
 
-            if (submitdfchtlc.timeout < CICXSubmitDFCHTLC::MINIMUM_2ND_TIMEOUT)
-                return Res::Err("timeout must be greater than %d", CICXSubmitDFCHTLC::MINIMUM_2ND_TIMEOUT - 1);
+            uint32_t timeout, btcBlocksInDfi;
+            if (static_cast<int>(height) < consensus.EunosPayaHeight)
+            {
+                timeout = CICXSubmitDFCHTLC::MINIMUM_2ND_TIMEOUT;
+                btcBlocksInDfi = CICXSubmitEXTHTLC::BTC_BLOCKS_IN_DFI_BLOCKS;
+            }
+            else
+            {
+                timeout = CICXSubmitDFCHTLC::EUNOSPAYA_MINIMUM_2ND_TIMEOUT;
+                btcBlocksInDfi = CICXSubmitEXTHTLC::BTC_BLOCKS_IN_DFI_BLOCKS;
+            }
 
-            if (submitdfchtlc.timeout >= (exthtlc->creationHeight + (exthtlc->timeout * CICXSubmitEXTHTLC::BTC_BLOCKS_IN_DFI_BLOCKS)) - height)
+            if (submitdfchtlc.timeout < timeout)
+                return Res::Err("timeout must be greater than %d", timeout - 1);
+
+            if (submitdfchtlc.timeout >= (exthtlc->creationHeight + (exthtlc->timeout * btcBlocksInDfi)) - height)
                 return Res::Err("timeout must be less than expiration period of 1st htlc in DFI blocks");
         }
 
@@ -1396,15 +1482,27 @@ public:
 
             CAmount calcAmount(static_cast<CAmount>((arith_uint256(dfchtlc->amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
             if (submitexthtlc.amount != calcAmount)
-                return Res::Err("amount %d must be equal to calculated dfchtlc amount %d", submitexthtlc.amount, calcAmount);
+                return Res::Err("amount must be equal to calculated dfchtlc amount");
 
             if (submitexthtlc.hash != dfchtlc->hash)
                 return Res::Err("Invalid hash, external htlc hash is different than dfc htlc hash");
 
-            if (submitexthtlc.timeout < CICXSubmitEXTHTLC::MINIMUM_2ND_TIMEOUT)
-                return Res::Err("timeout must be greater than %d", CICXSubmitEXTHTLC::MINIMUM_2ND_TIMEOUT - 1);
+            uint32_t timeout, btcBlocksInDfi;
+            if (static_cast<int>(height) < consensus.EunosPayaHeight)
+            {
+                timeout = CICXSubmitEXTHTLC::MINIMUM_2ND_TIMEOUT;
+                btcBlocksInDfi = CICXSubmitEXTHTLC::BTC_BLOCKS_IN_DFI_BLOCKS;
+            }
+            else
+            {
+                timeout = CICXSubmitEXTHTLC::EUNOSPAYA_MINIMUM_2ND_TIMEOUT;
+                btcBlocksInDfi = CICXSubmitEXTHTLC::EUNOSPAYA_BTC_BLOCKS_IN_DFI_BLOCKS;
+            }
 
-            if (submitexthtlc.timeout * CICXSubmitEXTHTLC::BTC_BLOCKS_IN_DFI_BLOCKS >= (dfchtlc->creationHeight + dfchtlc->timeout) - height)
+            if (submitexthtlc.timeout < timeout)
+                return Res::Err("timeout must be greater than %d", timeout - 1);
+
+            if (submitexthtlc.timeout * btcBlocksInDfi >= (dfchtlc->creationHeight + dfchtlc->timeout) - height)
                 return Res::Err("timeout must be less than expiration period of 1st htlc in DFC blocks");
         } else if (order->orderType == CICXOrder::TYPE_EXTERNAL) {
 
@@ -1414,17 +1512,35 @@ public:
             if (!mnview.HasICXMakeOfferOpen(offer->orderTx, submitexthtlc.offerTx))
                 return Res::Err("offerTx (%s) has expired", submitexthtlc.offerTx.GetHex());
 
-            if (submitexthtlc.timeout < CICXSubmitEXTHTLC::MINIMUM_TIMEOUT)
-                return Res::Err("timeout must be greater than %d", CICXSubmitEXTHTLC::MINIMUM_TIMEOUT - 1);
+            uint32_t timeout;
+            if (static_cast<int>(height) < consensus.EunosPayaHeight)
+                timeout = CICXSubmitEXTHTLC::MINIMUM_TIMEOUT;
+            else
+                timeout = CICXSubmitEXTHTLC::EUNOSPAYA_MINIMUM_TIMEOUT;
+
+            if (submitexthtlc.timeout < timeout)
+                return Res::Err("timeout must be greater than %d", timeout - 1);
+
+            CScript offerTxidAddr(offer->creationTx.begin(), offer->creationTx.end());
 
             CAmount calcAmount(static_cast<CAmount>((arith_uint256(submitexthtlc.amount) * arith_uint256(order->orderPrice) / arith_uint256(COIN)).GetLow64()));
             if (calcAmount > offer->amount)
                 return Res::Err("amount must be lower or equal the offer one");
 
-            CScript offerTxidAddr(offer->creationTx.begin(), offer->creationTx.end());
-
-            //calculating adjusted takerFee
-            auto takerFee = CalculateTakerFee(submitexthtlc.amount);
+            CAmount takerFee = offer->takerFee;
+            //EunosPaya: calculating adjusted takerFee only if amount in htlc different than in offer
+            if (static_cast<int>(height) >= consensus.EunosPayaHeight)
+            {
+                if (calcAmount < offer->amount)
+                {
+                    CAmount BTCAmount(static_cast<CAmount>((arith_uint256(offer->amount) * arith_uint256(COIN) / arith_uint256(order->orderPrice)).GetLow64()));
+                    takerFee = static_cast<CAmount>((arith_uint256(submitexthtlc.amount) * arith_uint256(offer->takerFee) / arith_uint256(BTCAmount)).GetLow64());
+                }
+            }
+            else
+            {
+                takerFee = CalculateTakerFee(submitexthtlc.amount);
+            }
 
             // refund the rest of locked takerFee if there is difference
             if (offer->takerFee - takerFee) {
@@ -1488,7 +1604,7 @@ public:
             return Res::Err("order with creation tx %s does not exists!", offer->orderTx.GetHex());
 
         auto exthtlc = mnview.HasICXSubmitEXTHTLCOpen(dfchtlc->offerTx);
-        if (!exthtlc)
+        if (static_cast<int>(height) < consensus.EunosPayaHeight && !exthtlc)
             return Res::Err("cannot claim, external htlc for this offer does not exists or expired!");
 
         // claim DFC HTLC to receiveAddress
@@ -1547,7 +1663,15 @@ public:
         if (!res)
             return res;
 
-        return mnview.ICXCloseEXTHTLC(*exthtlc, CICXSubmitEXTHTLC::STATUS_CLOSED);
+        if (static_cast<int>(height) >= consensus.EunosPayaHeight)
+        {
+            if (exthtlc)
+                return mnview.ICXCloseEXTHTLC(*exthtlc, CICXSubmitEXTHTLC::STATUS_CLOSED);
+            else
+                return (Res::Ok());
+        }
+        else
+            return mnview.ICXCloseEXTHTLC(*exthtlc, CICXSubmitEXTHTLC::STATUS_CLOSED);
     }
 
     Res operator()(const CICXCloseOrderMessage& obj) const {
@@ -1623,7 +1747,10 @@ public:
         offer->closeTx = closeoffer.creationTx;
         offer->closeHeight = closeoffer.creationHeight;
 
-        if (order->orderType == CICXOrder::TYPE_INTERNAL && !mnview.HasICXSubmitDFCHTLCOpen(offer->creationTx)) {
+        bool isPreEunosPaya = static_cast<int>(height) < consensus.EunosPayaHeight;
+
+        if (order->orderType == CICXOrder::TYPE_INTERNAL && !mnview.ExistedICXSubmitDFCHTLC(offer->creationTx, isPreEunosPaya))
+        {
             // subtract takerFee from txidAddr and return to owner
             CScript txidAddr(offer->creationTx.begin(), offer->creationTx.end());
             CalculateOwnerRewards(offer->ownerAddress);
@@ -1635,10 +1762,13 @@ public:
             // subtract the balance from txidAddr and return to owner
             CScript txidAddr(offer->creationTx.begin(), offer->creationTx.end());
             CalculateOwnerRewards(offer->ownerAddress);
-            res = ICXTransfer(order->idToken, offer->amount, txidAddr, offer->ownerAddress);
-            if (!res)
-                return res;
-            if (!mnview.HasICXSubmitEXTHTLCOpen(offer->creationTx))
+            if (isPreEunosPaya)
+            {
+                res = ICXTransfer(order->idToken, offer->amount, txidAddr, offer->ownerAddress);
+                if (!res)
+                    return res;
+            }
+            if (!mnview.ExistedICXSubmitEXTHTLC(offer->creationTx, isPreEunosPaya))
             {
                 res = ICXTransfer(DCT_ID{0}, offer->takerFee, txidAddr, offer->ownerAddress);
                 if (!res)
@@ -1740,49 +1870,158 @@ public:
 
         return mnview.LoanUpdateLoanToken(loanToken, token->first);
     }
-
-    Res operator()(const CCreateLoanSchemeMessage& obj) const {
+    
+    Res operator()(const CLoanSchemeMessage& obj) const {
         if (!HasFoundationAuth()) {
             return Res::Err("tx not from foundation member!");
         }
 
         if (obj.ratio < 100) {
-            return Res::Err("Ratio cannot be less than 100");
+            return Res::Err("minimum collateral ratio cannot be less than 100");
         }
 
         if (obj.rate < 1000000) {
-            return Res::Err("Rate cannot be less than 0.01");
+            return Res::Err("interest rate cannot be less than 0.01");
         }
 
         if (obj.identifier.empty() || obj.identifier.length() > 8) {
-            return Res::Err("Identifier cannot be empty or more than 8 chars long");
+            return Res::Err("id cannot be empty or more than 8 chars long");
         }
 
-        bool duplicateID = false, duplicateLoan = false;
-        mnview.ForEachLoanScheme([&](const std::string& key, const CLoanSchemeData& data) {
-            if (key == obj.identifier) {
-                duplicateID = true;
-                return false;
-            }
-
+        // Look for loan scheme which already has matching rate and ratio
+        bool duplicateLoan = false;
+        std::string duplicateID;
+        mnview.ForEachLoanScheme([&](const std::string& key, const CLoanSchemeData& data)
+        {
+            // Duplicate scheme already exists
             if (data.ratio == obj.ratio && data.rate == obj.rate) {
                 duplicateLoan = true;
+                duplicateID = key;
                 return false;
             }
             return true;
         });
 
-        if (duplicateID) {
-            return Res::Err(strprintf("Loan scheme already exist with identifier %s", obj.identifier));
+        if (duplicateLoan) {
+            return Res::Err(strprintf("Loan scheme %s with same interestrate and mincolratio already exists", duplicateID));
+        } else {
+            // Look for delayed loan scheme which already has matching rate and ratio
+            std::pair<std::string, uint64_t> duplicateKey;
+            mnview.ForEachDelayedLoanScheme([&](const std::pair<std::string, uint64_t>& key, const CLoanSchemeMessage& data)
+            {
+                // Duplicate delayed loan scheme
+                if (data.ratio == obj.ratio && data.rate == obj.rate) {
+                    duplicateLoan = true;
+                    duplicateKey = key;
+                    return false;
+                }
+                return true;
+            });
+
+            if (duplicateLoan) {
+                return Res::Err(strprintf("Loan scheme %s with same interestrate and mincolratio pending on block %d", duplicateKey.first, duplicateKey.second));
+            }
         }
 
-        if (duplicateLoan) {
-            return Res::Err("Loan scheme with same rate and ratio already exists");
+        // New loan scheme, no duplicate expected.
+        if (mnview.GetLoanScheme(obj.identifier)) {
+            if (!obj.update) {
+                return Res::Err(strprintf("Loan scheme already exist with id %s", obj.identifier));
+            }
+        } else if (obj.update) {
+            return Res::Err(strprintf("Cannot find existing loan scheme with id %s", obj.identifier));
+        }
+
+        // Update set, not max uint64_t which indicates immediate update and not updated on this block.
+        if (obj.update && obj.update != std::numeric_limits<uint64_t>::max() && obj.update != height) {
+            if (obj.update < height) {
+                return Res::Err("Update height below current block height, set future height");
+            }
+
+            return mnview.StoreDelayedLoanScheme(obj);
+        }
+
+        // If no default yet exist set this one as default.
+        if (!mnview.Exists(CLoanView::DefaultLoanSchemeKey::prefix)) {
+            mnview.StoreDefaultLoanScheme(obj.identifier);
         }
 
         return mnview.StoreLoanScheme(obj);
     }
 
+    Res operator()(const CDefaultLoanSchemeMessage& obj) const {
+        if (!HasFoundationAuth()) {
+            return Res::Err("tx not from foundation member!");
+        }
+
+        if (obj.identifier.empty() || obj.identifier.length() > 8) {
+            return Res::Err("id cannot be empty or more than 8 chars long");
+        }
+
+        if (!mnview.GetLoanScheme(obj.identifier)) {
+            return Res::Err(strprintf("Cannot find existing loan scheme with id %s", obj.identifier));
+        }
+
+        const auto currentID = mnview.GetDefaultLoanScheme();
+        if (currentID && *currentID == obj.identifier) {
+            return Res::Err(strprintf("Loan scheme with id %s is already set as default", obj.identifier));
+        }
+
+        if (auto height = mnview.GetDestroyLoanScheme(obj.identifier)) {
+            return Res::Err(strprintf("Cannot set %s as default, set to destroyed on block %d", obj.identifier, *height));
+        }
+
+        return mnview.StoreDefaultLoanScheme(obj.identifier);;
+    }
+
+    Res operator()(const CDestroyLoanSchemeMessage& obj) const {
+        if (!HasFoundationAuth()) {
+            return Res::Err("tx not from foundation member!");
+        }
+
+        if (obj.identifier.empty() || obj.identifier.length() > 8) {
+            return Res::Err("id cannot be empty or more than 8 chars long");
+        }
+
+        if (!mnview.GetLoanScheme(obj.identifier)) {
+            return Res::Err(strprintf("Cannot find existing loan scheme with id %s", obj.identifier));
+        }
+
+        const auto currentID = mnview.GetDefaultLoanScheme();
+        if (currentID && *currentID == obj.identifier) {
+            return Res::Err("Cannot destroy default loan scheme, set new default first");
+        }
+
+        // Update set and not updated on this block.
+        if (obj.height && obj.height != height) {
+            if (obj.height < height) {
+                return Res::Err("Destruction height below current block height, set future height");
+            }
+
+            return mnview.StoreDelayedDestroyScheme(obj);
+        }
+
+        return mnview.EraseLoanScheme(obj.identifier);
+    }
+
+    Res operator()(const CVaultMessage& obj) const {
+        // Check LoanScheme exists
+        auto vault = CVault();
+        static_cast<CVaultMessage&>(vault) = obj;
+        if(obj.schemeId.empty()){
+            if (auto defaultScheme = mnview.GetDefaultLoanScheme()){
+                vault.schemeId = *defaultScheme;
+            } else {
+                return Res::Err(strprintf("There is not default loan scheme"));
+            }
+        }
+
+        if (!mnview.GetLoanScheme(vault.schemeId)) {
+            return Res::Err(strprintf("Cannot find existing loan scheme with id %s", obj.schemeId));
+        }
+
+        return mnview.StoreVault(tx.GetHash(), vault);
+    }
     Res operator()(const CCustomTxMessageNone&) const {
         return Res::Ok();
     }
@@ -2099,18 +2338,26 @@ ResVal<uint256> ApplyAnchorRewardTxPlus(CCustomCSView & mnview, CTransaction con
     }
 
     // Miner used confirm team at chain height when creating this TX, this is height - 1.
-    if (!finMsg.CheckConfirmSigs(height - 1)) {
+    int anchorHeight = height - 1;
+    auto uniqueKeys = finMsg.CheckConfirmSigs(anchorHeight);
+    if (!uniqueKeys) {
         return Res::ErrDbg("bad-ar-sigs", "anchor signatures are incorrect");
     }
 
-    auto team = mnview.GetConfirmTeam(height - 1);
+    auto team = mnview.GetConfirmTeam(anchorHeight);
     if (!team) {
-        return Res::ErrDbg("bad-ar-team", "could not get confirm team for height: %d", height - 1);
+        return Res::ErrDbg("bad-ar-team", "could not get confirm team for height: %d", anchorHeight);
     }
 
-    if (finMsg.sigs.size() < GetMinAnchorQuorum(*team)) {
+    auto quorum = GetMinAnchorQuorum(*team);
+    if (finMsg.sigs.size() < quorum) {
         return Res::ErrDbg("bad-ar-sigs-quorum", "anchor sigs (%d) < min quorum (%) ",
-                           finMsg.sigs.size(), GetMinAnchorQuorum(*team));
+                           finMsg.sigs.size(), quorum);
+    }
+
+    if (anchorHeight >= Params().GetConsensus().EunosPayaHeight && uniqueKeys < quorum) {
+        return Res::ErrDbg("bad-ar-sigs-quorum", "anchor unique keys (%d) < min quorum (%) ",
+                           uniqueKeys, quorum);
     }
 
     // Make sure anchor block height and hash exist in chain.

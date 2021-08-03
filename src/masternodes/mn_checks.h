@@ -77,7 +77,10 @@ enum class CustomTxType : uint8_t
     LoanSetCollateralToken = 'c',
     LoanSetLoanToken = 'g',
     LoanUpdateLoanToken = 'f',
-    CreateLoanScheme   = 'L',
+    LoanScheme         = 'L',
+    DefaultLoanScheme  = 'd',
+    DestroyLoanScheme  = 'D',
+    Vault              = 'V',
 };
 
 inline CustomTxType CustomTxCodeToType(uint8_t ch) {
@@ -114,7 +117,10 @@ inline CustomTxType CustomTxCodeToType(uint8_t ch) {
         case CustomTxType::LoanSetCollateralToken:
         case CustomTxType::LoanSetLoanToken:
         case CustomTxType::LoanUpdateLoanToken:
-        case CustomTxType::CreateLoanScheme:
+        case CustomTxType::LoanScheme:
+        case CustomTxType::DefaultLoanScheme:
+        case CustomTxType::DestroyLoanScheme:
+        case CustomTxType::Vault:
         case CustomTxType::None:
             return type;
     }
@@ -145,12 +151,18 @@ inline void Unserialize(Stream& s, CustomTxType & txType) {
 struct CCreateMasterNodeMessage {
     char operatorType;
     CKeyID operatorAuthAddress;
+    uint16_t timelock{0};
 
     ADD_SERIALIZE_METHODS;
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(operatorType);
         READWRITE(operatorAuthAddress);
+
+        // Only available after EunosPaya
+        if (!s.eof()) {
+            READWRITE(timelock);
+        }
     }
 };
 
@@ -260,7 +272,10 @@ typedef boost::variant<
     CLoanSetCollateralTokenMessage,
     CLoanSetLoanTokenMessage,
     CLoanUpdateLoanTokenMessage,
-    CCreateLoanSchemeMessage
+    CLoanSchemeMessage,
+    CDefaultLoanSchemeMessage,
+    CDestroyLoanSchemeMessage,
+    CVaultMessage
 > CCustomTxMessage;
 
 CCustomTxMessage customTypeToMessage(CustomTxType txType);
