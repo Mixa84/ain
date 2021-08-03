@@ -405,7 +405,7 @@ public:
         auto res = isPostEunosFork();
         return !res ? res : serialize(obj);
     }
-    
+
     Res operator()(CLoanSetCollateralTokenMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
@@ -415,17 +415,17 @@ public:
             auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
-    
+
     Res operator()(CLoanSchemeMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
-    
+
     Res operator()(CLoanUpdateLoanTokenMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
-    
+
     Res operator()(CDefaultLoanSchemeMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
@@ -510,7 +510,7 @@ public:
         return Res::Ok();
     }
 
-    Res CheckICXTx() const {
+    Res CheckCustomTx() const {
         if (static_cast<int>(height) < consensus.EunosPayaHeight && tx.vout.size() != 2) {
             return Res::Err("malformed tx vouts ((wrong number of vouts)");
         }
@@ -1235,7 +1235,7 @@ public:
     }
 
     Res operator()(const CICXCreateOrderMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1265,7 +1265,7 @@ public:
     }
 
     Res operator()(const CICXMakeOfferMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1309,7 +1309,7 @@ public:
     }
 
     Res operator()(const CICXSubmitDFCHTLCMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res) {
             return res;
         }
@@ -1447,7 +1447,7 @@ public:
     }
 
     Res operator()(const CICXSubmitEXTHTLCMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1568,7 +1568,7 @@ public:
     }
 
     Res operator()(const CICXClaimDFCHTLCMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1675,7 +1675,7 @@ public:
     }
 
     Res operator()(const CICXCloseOrderMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1716,7 +1716,7 @@ public:
     }
 
     Res operator()(const CICXCloseOfferMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1781,7 +1781,7 @@ public:
     }
 
     Res operator()(const CLoanSetCollateralTokenMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1810,7 +1810,7 @@ public:
     }
 
     Res operator()(const CLoanSetLoanTokenMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1845,7 +1845,7 @@ public:
     }
 
     Res operator()(const CLoanUpdateLoanTokenMessage& obj) const {
-        auto res = CheckICXTx();
+        auto res = CheckCustomTx();
         if (!res)
             return res;
 
@@ -1870,7 +1870,7 @@ public:
 
         return mnview.LoanUpdateLoanToken(loanToken, token->first);
     }
-    
+
     Res operator()(const CLoanSchemeMessage& obj) const {
         if (!HasFoundationAuth()) {
             return Res::Err("tx not from foundation member!");
