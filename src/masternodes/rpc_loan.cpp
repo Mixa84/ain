@@ -1,12 +1,14 @@
 #include <masternodes/mn_rpc.h>
 
+extern UniValue tokenToJSON(DCT_ID const& id, CTokenImplementation const& token, bool verbose);
+
 UniValue setCollateralTokenToJSON(CLoanSetCollateralTokenImplementation const& collToken)
 {
     UniValue collTokenObj(UniValue::VOBJ);
 
     auto token = pcustomcsview->GetToken(collToken.idToken);
-        if (!token)
-            return (UniValue::VNULL);
+    if (!token)
+        return (UniValue::VNULL);
     collTokenObj.pushKV("token", token->CreateSymbolKey(collToken.idToken));
     collTokenObj.pushKV("factor", ValueFromAmount(collToken.factor));
     collTokenObj.pushKV("priceFeedId", collToken.priceFeedTxid.GetHex());
@@ -15,6 +17,23 @@ UniValue setCollateralTokenToJSON(CLoanSetCollateralTokenImplementation const& c
 
     UniValue ret(UniValue::VOBJ);
     ret.pushKV(collToken.creationTx.GetHex(), collTokenObj);
+    return (ret);
+}
+
+UniValue setLoanTokenToJSON(CLoanSetLoanTokenImplementation const& loanToken, DCT_ID tokenId)
+{
+    UniValue loanTokenObj(UniValue::VOBJ);
+
+    auto token = pcustomcsview->GetToken(tokenId);
+    if (!token)
+        return (UniValue::VNULL);
+
+    loanTokenObj.pushKV("token",tokenToJSON(tokenId, *static_cast<CTokenImplementation*>(token.get()), true));
+    loanTokenObj.pushKV("priceFeedId", loanToken.priceFeedTxid.GetHex());
+    loanTokenObj.pushKV("interest", ValueFromAmount(loanToken.interest));
+
+    UniValue ret(UniValue::VOBJ);
+    ret.pushKV(loanToken.creationTx.GetHex(), loanTokenObj);
     return (ret);
 }
 
@@ -246,7 +265,7 @@ UniValue setloantoken(const JSONRPCRequest& request) {
                         {
                             {"symbol", RPCArg::Type::STR, RPCArg::Optional::NO, "Token's symbol (unique), no longer than " + std::to_string(CToken::MAX_TOKEN_SYMBOL_LENGTH)},
                             {"name", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Token's name (optional), no longer than " + std::to_string(CToken::MAX_TOKEN_NAME_LENGTH)},
-                            {"priceFeedTxid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "txid of oracle feeding the price"},
+                            {"priceFeedId", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "txid of oracle feeding the price"},
                             {"mintable", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Token's 'Mintable' property (bool, optional), default is 'True'"},
                             {"factor", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Interest rate (default: 0)"},
                         },
@@ -294,10 +313,10 @@ UniValue setloantoken(const JSONRPCRequest& request) {
         throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"symbol\" must not be null");
     if (!metaObj["name"].isNull())
         genToken.name = trim_ws(metaObj["name"].getValStr());
-    if (!metaObj["priceFeedTxid"].isNull())
-        genToken.priceFeedTxid = uint256S(metaObj["priceFeedTxid"].getValStr());
+    if (!metaObj["priceFeedId"].isNull())
+        genToken.priceFeedTxid = uint256S(metaObj["priceFeedId"].getValStr());
     else
-        throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"priceFeedTxid\" must be non-null");
+        throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid parameters, argument \"priceFeedId\" must be non-null");
     if (!metaObj["mintable"].isNull())
         genToken.mintable = metaObj["mintable"].getBool();
     if (!metaObj["interest"].isNull())
@@ -359,7 +378,7 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
                         {
                             {"symbol", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Token's symbol (unique), no longer than " + std::to_string(CToken::MAX_TOKEN_SYMBOL_LENGTH)},
                             {"name", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Token's name (optional), no longer than " + std::to_string(CToken::MAX_TOKEN_NAME_LENGTH)},
-                            {"priceFeedTxid", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "txid of oracle feeding the price"},
+                            {"priceFeedId", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "txid of oracle feeding the price"},
                             {"mintable", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Token's 'Mintable' property (bool, optional), default is 'True'"},
                             {"factor", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Interest rate (default: 0)"},
                         },
@@ -427,8 +446,8 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
         loanToken->symbol = trim_ws(metaObj["symbol"].getValStr());
     if (!metaObj["name"].isNull())
         loanToken->name = trim_ws(metaObj["name"].getValStr());
-    if (!metaObj["priceFeedTxid"].isNull())
-        loanToken->priceFeedTxid = uint256S(metaObj["priceFeedTxid"].getValStr());
+    if (!metaObj["priceFeedId"].isNull())
+        loanToken->priceFeedTxid = uint256S(metaObj["priceFeedId"].getValStr());
     if (!metaObj["mintable"].isNull())
         loanToken->mintable = metaObj["mintable"].getBool();
     if (!metaObj["interest"].isNull())
@@ -471,6 +490,30 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
     }
 
     return signsend(rawTx, pwallet, optAuthTx)->GetHash().GetHex();
+}
+
+UniValue listloantokens(const JSONRPCRequest& request) {
+    RPCHelpMan{"listloantokens",
+                "Return list of all created loan tokens.\n",
+                {},
+                RPCResult
+                {
+                    "{...}     (object) Json object with loan token information\n"
+                },
+                RPCExamples{
+                    HelpExampleCli("listloantokens", "")
+                },
+     }.Check(request);
+
+    UniValue ret(UniValue::VOBJ);
+
+    pcustomcsview->ForEachLoanSetLoanToken([&](DCT_ID const & key, CLoanView::CLoanSetLoanTokenImpl loanToken) {
+        ret.pushKVs(setLoanTokenToJSON(loanToken,key));
+
+        return true;
+    });
+
+    return (ret);
 }
 
 UniValue createloanscheme(const JSONRPCRequest& request) {
@@ -640,6 +683,7 @@ static const CRPCCommand commands[] =
     {"loan",        "listcollateraltokens",      &listcollateraltokens,  {}},
     {"loan",        "setloantoken",              &setloantoken,          {"metadata", "inputs"}},
     {"loan",        "updateloantoken",           &updateloantoken,       {"metadata", "inputs"}},
+    {"loan",        "listloantokens",            &listloantokens,        {}},
     {"loan",        "createloanscheme",          &createloanscheme,      {"ratio", "rate"}},
     {"loan",        "listloanschemes",           &listloanschemes,       {}},
 };

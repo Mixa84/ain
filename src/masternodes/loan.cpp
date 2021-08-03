@@ -4,7 +4,7 @@ const unsigned char CLoanView::LoanSetCollateralTokenCreationTx           ::pref
 const unsigned char CLoanView::LoanSetCollateralTokenKey                  ::prefix = 0x11;
 const unsigned char CLoanView::CreateLoanSchemeKey                        ::prefix = 0x12;
 const unsigned char CLoanView::LoanSetLoanTokenCreationTx                 ::prefix = 0x13;
-const unsigned char CLoanView::LoanSetLoanTokenByID                       ::prefix = 0x14;
+const unsigned char CLoanView::LoanSetLoanTokenKey                        ::prefix = 0x14;
 
 std::unique_ptr<CLoanView::CLoanSetCollateralTokenImpl> CLoanView::GetLoanSetCollateralToken(uint256 const & txid) const
 {
@@ -48,7 +48,8 @@ std::unique_ptr<CLoanView::CLoanSetCollateralTokenImpl> CLoanView::HasLoanSetCol
 
 std::unique_ptr<CLoanView::CLoanSetLoanTokenImpl> CLoanView::GetLoanSetLoanToken(uint256 const & txid) const
 {
-    auto loanToken = ReadBy<LoanSetLoanTokenCreationTx,CLoanSetLoanTokenImpl>(txid);
+    auto id = ReadBy<LoanSetLoanTokenCreationTx, DCT_ID>(txid);
+    auto loanToken = ReadBy<LoanSetLoanTokenKey,CLoanSetLoanTokenImpl>(*id);
     if (loanToken)
         return MakeUnique<CLoanSetLoanTokenImpl>(*loanToken);
     return {};
@@ -56,8 +57,7 @@ std::unique_ptr<CLoanView::CLoanSetLoanTokenImpl> CLoanView::GetLoanSetLoanToken
 
 std::unique_ptr<CLoanView::CLoanSetLoanTokenImpl> CLoanView::GetLoanSetLoanTokenByID(DCT_ID const & id) const
 {
-    auto txid = ReadBy<LoanSetLoanTokenByID, uint256>(id);
-    auto loanToken = ReadBy<LoanSetLoanTokenCreationTx,CLoanSetLoanTokenImpl>(txid.get());
+    auto loanToken = ReadBy<LoanSetLoanTokenKey,CLoanSetLoanTokenImpl>(id);
     if (loanToken)
         return MakeUnique<CLoanSetLoanTokenImpl>(*loanToken);
     return {};
@@ -66,13 +66,13 @@ std::unique_ptr<CLoanView::CLoanSetLoanTokenImpl> CLoanView::GetLoanSetLoanToken
 Res CLoanView::LoanSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id)
 {
     //this should not happen, but for sure
-    if (GetLoanSetCollateralToken(loanToken.creationTx))
+    if (GetLoanSetLoanTokenByID(id))
         return Res::Err("setLoanToken with creation tx %s already exists!", loanToken.creationTx.GetHex());
 
     if (loanToken.interest < 0)
         return Res::Err("interest rate must be positive number!");
 
-    WriteBy<LoanSetLoanTokenByID>(id, loanToken);
+    WriteBy<LoanSetLoanTokenKey>(id, loanToken);
     WriteBy<LoanSetLoanTokenCreationTx>(loanToken.creationTx, id);
 
     return Res::Ok();
@@ -80,15 +80,20 @@ Res CLoanView::LoanSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID 
 
 Res CLoanView::LoanUpdateLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id)
 {
-    if (!GetLoanSetCollateralToken(loanToken.creationTx))
-        return Res::Err("setLoanToken with creation tx %s doesn't exists!", loanToken.creationTx.GetHex());
+    if (!GetLoanSetLoanTokenByID(id))
+        return Res::Err("Loan token with id %s doesn't exists!", id.v);
 
     if (loanToken.interest < 0)
         return Res::Err("interest rate must be positive number!");
 
-    WriteBy<LoanSetLoanTokenByID>(id, loanToken);
+    WriteBy<LoanSetLoanTokenKey>(id, loanToken);
 
     return Res::Ok();
+}
+
+void CLoanView::ForEachLoanSetLoanToken(std::function<bool (DCT_ID const &, CLoanSetLoanTokenImpl const &)> callback, DCT_ID const & start)
+{
+    ForEach<LoanSetLoanTokenKey, DCT_ID, CLoanSetLoanTokenImpl>(callback, start);
 }
 
 Res CLoanView::StoreLoanScheme(const CCreateLoanSchemeMessage& loanScheme)

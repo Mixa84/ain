@@ -1690,12 +1690,16 @@ public:
         loanToken.creationTx = tx.GetHash();
         loanToken.creationHeight = height;
 
+        if (!HasFoundationAuth()) {
+            return Res::Err("tx not from foundation member!");
+        }
+
         if (!mnview.GetOracleData(loanToken.priceFeedTxid))
             return Res::Err("oracle (%s) does not exist!", loanToken.priceFeedTxid.GetHex());
 
         CTokenImplementation token;
         token.flags = loanToken.mintable ? (uint8_t)CToken::TokenFlags::Default : (uint8_t)CToken::TokenFlags::Tradeable;
-        token.flags |= (uint8_t)CToken::TokenFlags::LoanToken;
+        token.flags |= (uint8_t)CToken::TokenFlags::LoanToken | (uint8_t)CToken::TokenFlags::DAT;
 
         token.symbol = trim_ws(loanToken.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
         token.name = trim_ws(loanToken.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
@@ -1707,7 +1711,7 @@ public:
             return std::move(tokenId);
         }
 
-        return mnview.LoanSetLoanToken(loanToken, tokenId);
+        return mnview.LoanSetLoanToken(loanToken, *(tokenId.val));
     }
 
     Res operator()(const CLoanUpdateLoanTokenMessage& obj) const {
@@ -1717,9 +1721,6 @@ public:
 
         CLoanSetLoanTokenImplementation loanToken;
         static_cast<CLoanSetLoanToken&>(loanToken) = obj;
-
-        loanToken.creationTx = tx.GetHash();
-        loanToken.creationHeight = height;
 
         if (!mnview.GetOracleData(loanToken.priceFeedTxid))
             return Res::Err("oracle (%s) does not exist!", loanToken.priceFeedTxid.GetHex());

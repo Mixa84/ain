@@ -60,6 +60,7 @@ public:
     uint256 priceFeedTxid;
     bool mintable = false;
     CAmount interest = 0;
+    DCT_ID tokenId;
 
     ADD_SERIALIZE_METHODS;
 
@@ -156,6 +157,7 @@ public:
     std::unique_ptr<CLoanSetLoanTokenImpl> GetLoanSetLoanTokenByID(DCT_ID const & id) const;
     Res LoanSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id);
     Res LoanUpdateLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id);
+    void ForEachLoanSetLoanToken(std::function<bool (DCT_ID const &, CLoanSetLoanTokenImpl const &)> callback, DCT_ID const & start = {0});
 
     Res StoreLoanScheme(const CCreateLoanSchemeMessage& loanScheme);
     void ForEachLoanScheme(std::function<bool (const std::string&, const CLoanSchemeData&)> callback);
@@ -163,7 +165,6 @@ public:
     struct LoanSetCollateralTokenCreationTx { static const unsigned char prefix; };
     struct LoanSetCollateralTokenKey { static const unsigned char prefix; };
     struct LoanSetLoanTokenCreationTx { static const unsigned char prefix; };
-    struct LoanSetLoanTokenByID { static const unsigned char prefix; };
     struct LoanSetLoanTokenKey { static const unsigned char prefix; };
     struct CreateLoanSchemeKey { static const unsigned char prefix; };
 };
