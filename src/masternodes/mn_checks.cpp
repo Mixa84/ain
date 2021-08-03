@@ -57,6 +57,8 @@ std::string ToString(CustomTxType type) {
         case CustomTxType::ICXCloseOrder:       return "ICXCloseOrder";
         case CustomTxType::ICXCloseOffer:       return "ICXCloseOffer";
         case CustomTxType::LoanSetCollateralToken: return "LoanSetCollateralToken";
+        case CustomTxType::LoanSetLoanToken:     return "LoanSetLoanToken";
+        case CustomTxType::LoanUpdateLoanToken:     return "LoanUpdateLoanToken";
         case CustomTxType::LoanScheme:          return "LoanScheme";
         case CustomTxType::DefaultLoanScheme:   return "DefaultLoanScheme";
         case CustomTxType::DestroyLoanScheme:   return "DestroyLoanScheme";
@@ -137,6 +139,8 @@ CCustomTxMessage customTypeToMessage(CustomTxType txType) {
         case CustomTxType::ICXCloseOrder:           return CICXCloseOrderMessage{};
         case CustomTxType::ICXCloseOffer:           return CICXCloseOfferMessage{};
         case CustomTxType::LoanSetCollateralToken:  return CLoanSetCollateralTokenMessage{};
+        case CustomTxType::LoanSetLoanToken:        return CLoanSetLoanTokenMessage{};
+        case CustomTxType::LoanUpdateLoanToken:     return CLoanUpdateLoanTokenMessage{};
         case CustomTxType::LoanScheme:              return CLoanSchemeMessage{};
         case CustomTxType::DefaultLoanScheme:       return CDefaultLoanSchemeMessage{};
         case CustomTxType::DestroyLoanScheme:       return CDestroyLoanSchemeMessage{};
@@ -401,16 +405,27 @@ public:
         auto res = isPostEunosFork();
         return !res ? res : serialize(obj);
     }
+    
     Res operator()(CLoanSetCollateralTokenMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
 
+    Res operator()(CLoanSetLoanTokenMessage& obj) const {
+            auto res = isPostFortCanningFork();
+        return !res ? res : serialize(obj);
+    }
+    
     Res operator()(CLoanSchemeMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
-
+    
+    Res operator()(CLoanUpdateLoanTokenMessage& obj) const {
+        auto res = isPostFortCanningFork();
+        return !res ? res : serialize(obj);
+    }
+    
     Res operator()(CDefaultLoanSchemeMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
@@ -1794,6 +1809,68 @@ public:
         return mnview.LoanCreateSetCollateralToken(collToken);
     }
 
+    Res operator()(const CLoanSetLoanTokenMessage& obj) const {
+        auto res = CheckICXTx();
+        if (!res)
+            return res;
+
+        CLoanSetLoanTokenImplementation loanToken;
+        static_cast<CLoanSetLoanToken&>(loanToken) = obj;
+
+        loanToken.creationTx = tx.GetHash();
+        loanToken.creationHeight = height;
+
+        if (!HasFoundationAuth()) {
+            return Res::Err("tx not from foundation member!");
+        }
+
+        if (!mnview.GetOracleData(loanToken.priceFeedTxid))
+            return Res::Err("oracle (%s) does not exist!", loanToken.priceFeedTxid.GetHex());
+
+        CTokenImplementation token;
+        token.flags = loanToken.mintable ? (uint8_t)CToken::TokenFlags::Default : (uint8_t)CToken::TokenFlags::Tradeable;
+        token.flags |= (uint8_t)CToken::TokenFlags::LoanToken | (uint8_t)CToken::TokenFlags::DAT;
+
+        token.symbol = trim_ws(loanToken.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);
+        token.name = trim_ws(loanToken.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
+        token.creationTx = tx.GetHash();
+        token.creationHeight = height;
+
+        auto tokenId = mnview.CreateToken(token, false);
+        if (!tokenId) {
+            return std::move(tokenId);
+        }
+
+        return mnview.LoanSetLoanToken(loanToken, *(tokenId.val));
+    }
+
+    Res operator()(const CLoanUpdateLoanTokenMessage& obj) const {
+        auto res = CheckICXTx();
+        if (!res)
+            return res;
+
+        CLoanSetLoanTokenImplementation loanToken;
+        static_cast<CLoanSetLoanToken&>(loanToken) = obj;
+
+        if (!mnview.GetOracleData(loanToken.priceFeedTxid))
+            return Res::Err("oracle (%s) does not exist!", loanToken.priceFeedTxid.GetHex());
+
+        auto token = pcustomcsview->GetTokenByCreationTx(obj.tokenTx);
+
+        if (loanToken.symbol != token->second.symbol)
+            token->second.symbol = trim_ws(loanToken.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);;
+        if (loanToken.name != token->second.name)
+            token->second.name = trim_ws(loanToken.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
+        if (loanToken.mintable != token->second.flags && (uint8_t)CToken::TokenFlags::Mintable)
+            token->second.flags ^= (uint8_t)CToken::TokenFlags::Mintable;
+
+        res = mnview.UpdateToken(token->second.creationTx, static_cast<CToken>(token->second), false);
+        if (!res)
+            return res;
+
+        return mnview.LoanUpdateLoanToken(loanToken, token->first);
+    }
+    
     Res operator()(const CLoanSchemeMessage& obj) const {
         if (!HasFoundationAuth()) {
             return Res::Err("tx not from foundation member!");
