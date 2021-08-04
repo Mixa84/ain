@@ -416,12 +416,12 @@ public:
         return !res ? res : serialize(obj);
     }
 
-    Res operator()(CLoanSchemeMessage& obj) const {
+    Res operator()(CLoanUpdateLoanTokenMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
 
-    Res operator()(CLoanUpdateLoanTokenMessage& obj) const {
+    Res operator()(CLoanSchemeMessage& obj) const {
         auto res = isPostFortCanningFork();
         return !res ? res : serialize(obj);
     }
@@ -1849,26 +1849,35 @@ public:
         if (!res)
             return res;
 
-        CLoanSetLoanTokenImplementation loanToken;
-        static_cast<CLoanSetLoanToken&>(loanToken) = obj;
+        auto loanToken = pcustomcsview->GetLoanSetLoanToken(obj.tokenTx);
+        if (!loanToken)
+            return Res::Err("Loan token (%s) does not exist!", obj.tokenTx.GetHex());
 
-        if (!mnview.GetOracleData(loanToken.priceFeedTxid))
-            return Res::Err("oracle (%s) does not exist!", loanToken.priceFeedTxid.GetHex());
+        if (obj.priceFeedTxid != loanToken->priceFeedTxid && !mnview.GetOracleData(obj.priceFeedTxid))
+            return Res::Err("oracle (%s) does not exist!", loanToken->priceFeedTxid.GetHex());
+        loanToken->priceFeedTxid = obj.priceFeedTxid;
+
+        if (obj.mintable != loanToken->mintable)
+            loanToken->mintable = obj.mintable;
+        if (obj.interest != loanToken->interest)
+            loanToken->interest = obj.interest;
 
         auto token = pcustomcsview->GetTokenByCreationTx(obj.tokenTx);
+        if (!token)
+            return Res::Err("Loan token (%s) does not exist!", obj.tokenTx.GetHex());
 
-        if (loanToken.symbol != token->second.symbol)
-            token->second.symbol = trim_ws(loanToken.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);;
-        if (loanToken.name != token->second.name)
-            token->second.name = trim_ws(loanToken.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
-        if (loanToken.mintable != token->second.flags && (uint8_t)CToken::TokenFlags::Mintable)
+        if (obj.symbol != token->second.symbol)
+            token->second.symbol = trim_ws(obj.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);;
+        if (obj.name != token->second.name)
+            token->second.name = trim_ws(obj.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
+        if (obj.mintable != token->second.flags && (uint8_t)CToken::TokenFlags::Mintable)
             token->second.flags ^= (uint8_t)CToken::TokenFlags::Mintable;
 
         res = mnview.UpdateToken(token->second.creationTx, static_cast<CToken>(token->second), false);
         if (!res)
             return res;
 
-        return mnview.LoanUpdateLoanToken(loanToken, token->first);
+        return mnview.LoanUpdateLoanToken(*loanToken, token->first);
     }
 
     Res operator()(const CLoanSchemeMessage& obj) const {

@@ -109,6 +109,7 @@ struct CLoanUpdateLoanTokenMessage : public CLoanSetLoanToken {
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITEAS(CLoanSetLoanToken, *this);
+        READWRITE(tokenTx);
     }
 };
 

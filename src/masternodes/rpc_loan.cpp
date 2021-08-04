@@ -454,7 +454,7 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
 
     CDataStream metadata(DfTxMarker, SER_NETWORK, PROTOCOL_VERSION);
     metadata << static_cast<unsigned char>(CustomTxType::LoanUpdateLoanToken)
-             << loanToken->creationTx << static_cast<CLoanSetLoanToken>(*loanToken);
+             << static_cast<CLoanSetLoanToken>(*loanToken) << loanToken->creationTx;
 
     CScript scriptMeta;
     scriptMeta << OP_RETURN << ToByteVector(metadata);
@@ -484,7 +484,7 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
         CCoinsViewCache coinview(&::ChainstateActive().CoinsTip());
         if (optAuthTx)
             AddCoins(coinview, *optAuthTx, targetHeight);
-        const auto metadata = ToByteVector(CDataStream{SER_NETWORK, PROTOCOL_VERSION, *loanToken});
+        const auto metadata = ToByteVector(CDataStream{SER_NETWORK, PROTOCOL_VERSION, static_cast<CLoanSetLoanToken>(*loanToken), loanToken->creationTx});
         execTestTx(CTransaction(rawTx), targetHeight, metadata, CLoanUpdateLoanTokenMessage{}, coinview);
     }
 
