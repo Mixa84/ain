@@ -11,7 +11,6 @@ const unsigned char CLoanView::LoanSetLoanTokenKey                        ::pref
 // Vault
 const unsigned char CVaultView::VaultKey                                  ::prefix = 0x16;
 
-
 std::unique_ptr<CLoanView::CLoanSetCollateralTokenImpl> CLoanView::GetLoanSetCollateralToken(uint256 const & txid) const
 {
     auto collToken = ReadBy<LoanSetCollateralTokenCreationTx,CLoanSetCollateralTokenImpl>(txid);
@@ -86,9 +85,6 @@ Res CLoanView::LoanSetLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID 
 
 Res CLoanView::LoanUpdateLoanToken(CLoanSetLoanTokenImpl const & loanToken, DCT_ID const & id)
 {
-    if (!GetLoanSetLoanTokenByID(id))
-        return Res::Err("Loan token with id %s doesn't exists!", id.v);
-
     if (loanToken.interest < 0)
         return Res::Err("interest rate must be positive number!");
 

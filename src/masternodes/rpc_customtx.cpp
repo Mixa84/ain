@@ -317,6 +317,7 @@ public:
         rpcInfo.pushKV("name", obj.name);
         rpcInfo.pushKV("priceFeedTxid", obj.priceFeedTxid.GetHex());
         rpcInfo.pushKV("mintable", obj.mintable);
+        rpcInfo.pushKV("interest", obj.interest);
     }
 
     void operator()(const CLoanUpdateLoanTokenMessage& obj) const {
@@ -325,6 +326,7 @@ public:
         rpcInfo.pushKV("name", obj.name);
         rpcInfo.pushKV("priceFeedTxid", obj.priceFeedTxid.GetHex());
         rpcInfo.pushKV("mintable", obj.mintable);
+        rpcInfo.pushKV("interest", obj.interest);
     }
 
     void operator()(const CLoanSchemeMessage& obj) const {
