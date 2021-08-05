@@ -430,12 +430,14 @@ UniValue updateloantoken(const JSONRPCRequest& request) {
         if (!token) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s does not exist!", tokenStr));
         }
+        if (!token->IsLoanToken())
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s is not a loan token! Can't alter other tokens with this tx!", tokenStr));
         if (id == DCT_ID{0}) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Can't alter DFI token!"));
         }
         loanToken = pcustomcsview->GetLoanSetLoanTokenByID(id);
-        if (!loanToken || !token->IsLoanToken()) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Token %s is not a loan token! Can't alter other tokens with this tx!", tokenStr));
+        if (!loanToken) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Can't find %s loan token!", tokenStr));
         }
 
         targetHeight = ::ChainActive().Height() + 1;

@@ -29,7 +29,7 @@ class LoanSetLoanTokenTest (DefiTestFramework):
         self.nodes[1].generate(100)
         self.sync_blocks()
 
-        self.nodes[0].createtoken({
+        tokenTxid = self.nodes[0].createtoken({
             "symbol": "BTC",
             "name": "BTC token",
             "isDAT": True,
@@ -52,9 +52,32 @@ class LoanSetLoanTokenTest (DefiTestFramework):
         self.nodes[0].generate(1)
         self.sync_blocks()
 
+        try:
+            self.nodes[0].setloantoken({
+                            'symbol': "TSLA",
+                            'name': "Tesla stock token",
+                            'priceFeedId': tokenTxid,
+                            'mintable': False,
+                            'interest': 0})
+        except JSONRPCException as e:
+            errorString = e.error['message']
+        assert("oracle (" + tokenTxid + ") does not exist" in errorString)
+
+        try:
+            self.nodes[0].setloantoken({
+                            'symbol': "TSLA",
+                            'name': "Tesla stock token",
+                            'priceFeedId': oracle_id1,
+                            'mintable': False,
+                            'interest': -1})
+        except JSONRPCException as e:
+            errorString = e.error['message']
+            print(errorString)
+        assert("Amount out of range" in errorString)
+
         setLoanTokenTx = self.nodes[0].setloantoken({
-                            'symbol': "USDC",
-                            'name': "USD Cake stablecoin",
+                            'symbol': "TSLAAAA",
+                            'name': "Tesla",
                             'priceFeedId': oracle_id1,
                             'mintable': False,
                             'interest': 0})
@@ -66,15 +89,15 @@ class LoanSetLoanTokenTest (DefiTestFramework):
 
         assert_equal(len(loantokens), 1)
         tokenId = list(loantokens[setLoanTokenTx]["token"])[0]
-        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["symbol"], "USDC")
-        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["name"], "USD Cake stablecoin")
+        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["symbol"], "TSLAAAA")
+        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["name"], "Tesla")
         assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["mintable"], False)
         assert_equal(loantokens[setLoanTokenTx]["priceFeedId"], oracle_id1)
         assert_equal(loantokens[setLoanTokenTx]["interest"], Decimal('0'))
 
-        updateLoanTokenTx = self.nodes[0].updateloantoken("USDC",{
-                            'symbol': "USDCAKE",
-                            'name': "USD Cake coin",
+        updateLoanTokenTx = self.nodes[0].updateloantoken("TSLAAAA",{
+                            'symbol': "TSLA",
+                            'name': "Tesla stock token",
                             'priceFeedId': oracle_id1,
                             'mintable': True,
                             'interest': 0.05})
@@ -86,8 +109,8 @@ class LoanSetLoanTokenTest (DefiTestFramework):
 
         assert_equal(len(loantokens), 1)
         tokenId = list(loantokens[setLoanTokenTx]["token"])[0]
-        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["symbol"], "USDCAKE")
-        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["name"], "USD Cake coin")
+        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["symbol"], "TSLA")
+        assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["name"], "Tesla stock token")
         assert_equal(loantokens[setLoanTokenTx]["token"][tokenId]["mintable"], True)
         assert_equal(loantokens[setLoanTokenTx]["priceFeedId"], oracle_id1)
         assert_equal(loantokens[setLoanTokenTx]["interest"], Decimal('0.05'))

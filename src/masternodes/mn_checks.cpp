@@ -1825,7 +1825,7 @@ public:
         }
 
         if (!mnview.GetOracleData(loanToken.priceFeedTxid))
-            return Res::Err("oracle (%s) does not exist!", loanToken.priceFeedTxid.GetHex());
+            return Res::Err("oracle (%s) does not exist or not valid oracle!", loanToken.priceFeedTxid.GetHex());
 
         CTokenImplementation token;
         token.flags = loanToken.mintable ? (uint8_t)CToken::TokenFlags::Default : (uint8_t)CToken::TokenFlags::Tradeable;
@@ -1849,6 +1849,10 @@ public:
         if (!res)
             return res;
 
+        if (!HasFoundationAuth()) {
+            return Res::Err("tx not from foundation member!");
+        }
+
         auto loanToken = pcustomcsview->GetLoanSetLoanToken(obj.tokenTx);
         if (!loanToken)
             return Res::Err("Loan token (%s) does not exist!", obj.tokenTx.GetHex());
@@ -1862,22 +1866,22 @@ public:
         if (obj.interest != loanToken->interest)
             loanToken->interest = obj.interest;
 
-        auto token = pcustomcsview->GetTokenByCreationTx(obj.tokenTx);
-        if (!token)
+        auto pair = pcustomcsview->GetTokenByCreationTx(obj.tokenTx);
+        if (!pair)
             return Res::Err("Loan token (%s) does not exist!", obj.tokenTx.GetHex());
 
-        if (obj.symbol != token->second.symbol)
-            token->second.symbol = trim_ws(obj.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);;
-        if (obj.name != token->second.name)
-            token->second.name = trim_ws(obj.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
-        if (obj.mintable != token->second.flags && (uint8_t)CToken::TokenFlags::Mintable)
-            token->second.flags ^= (uint8_t)CToken::TokenFlags::Mintable;
+        if (obj.symbol != pair->second.symbol)
+            pair->second.symbol = trim_ws(obj.symbol).substr(0, CToken::MAX_TOKEN_SYMBOL_LENGTH);;
+        if (obj.name != pair->second.name)
+            pair->second.name = trim_ws(obj.name).substr(0, CToken::MAX_TOKEN_NAME_LENGTH);
+        if (obj.mintable != pair->second.flags && (uint8_t)CToken::TokenFlags::Mintable)
+            pair->second.flags ^= (uint8_t)CToken::TokenFlags::Mintable;
 
-        res = mnview.UpdateToken(token->second.creationTx, static_cast<CToken>(token->second), false);
+        res = mnview.UpdateToken(pair->second.creationTx, static_cast<CToken>(pair->second), false);
         if (!res)
             return res;
 
-        return mnview.LoanUpdateLoanToken(*loanToken, token->first);
+        return mnview.LoanUpdateLoanToken(*loanToken, pair->first);
     }
 
     Res operator()(const CLoanSchemeMessage& obj) const {
