@@ -2538,16 +2538,28 @@ public:
             if (!res)
                 return res;
 
+            CInterestRate prevRate;
+
+            if (static_cast<int>(height) >= consensus.GreatWorldHeight)
+            {
+                prevRate.interestPerBlock = 0;
+
+                auto rate = mnview.GetInterestRate(obj.vaultId, tokenId);
+                auto loans = mnview.GetLoanTokens(obj.vaultId);
+                if (loans->balances[tokenId] != 0 && rate)
+                    prevRate.interestPerBlock = rate->interestPerBlock;
+            }
+
             res = mnview.StoreInterest(height, obj.vaultId, vault->schemeId, tokenId, kv.second);
             if (!res)
                 return res;
 
             if (static_cast<int>(height) >= consensus.GreatWorldHeight)
             {
-                auto rate = mnview.GetInterestRate(obj.vaultId, tokenId);
-                if (!rate)
+                auto newRate = mnview.GetInterestRate(obj.vaultId, tokenId);
+                if (!newRate)
                     return Res::Err("Cannot get interest rate for this token (%s)!", loanToken->symbol);
-                if (rate->interestPerBlock == 0)
+                if (prevRate.interestPerBlock - newRate->interestPerBlock == 0)
                     return Res::Err("Cannot take this amount of loan for %s, you need to take higher amount!", loanToken->symbol);
             }
 

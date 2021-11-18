@@ -184,7 +184,7 @@ class LoanZeroInterestTest (DefiTestFramework):
         try:
             self.nodes[0].takeloan({
                     'vaultId': vaultId,
-                    'amounts': ["1@" + symbolTSLA, "0.00009@" + symbolGOOGL]})
+                    'amounts': ["0.00009@" + symbolGOOGL]})
         except JSONRPCException as e:
             errorString = e.error['message']
         assert("Cannot take this amount of loan for " + symbolGOOGL + ", you need to take higher amount" in errorString)
@@ -195,6 +195,15 @@ class LoanZeroInterestTest (DefiTestFramework):
 
         self.nodes[0].generate(1)
         self.sync_blocks()
+
+        try:
+            self.nodes[0].takeloan({
+                    'vaultId': vaultId,
+                    'amounts': ["0.00009@" + symbolGOOGL]})
+        except JSONRPCException as e:
+            errorString = e.error['message']
+        assert("Cannot take this amount of loan for " + symbolGOOGL + ", you need to take higher amount" in errorString)
+
 
         # create pool TSLA
         self.nodes[0].createpoolpair({
