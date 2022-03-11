@@ -31,16 +31,20 @@ if [ "${BITCOIN_GENBUILD_NO_GIT}" != "1" ] && [ -e "$(command -v git)" ] && [ "$
 
     # if latest commit is tagged and not dirty, then override using the tag name
     RAWDESC=$(git describe --tags --abbrev=0 2>/dev/null)
+    echo "RAWDESC: $RAWDESC"
+    echo "$(git rev-parse HEAD)"
+    echo "$(git rev-list -1 $RAWDESC 2>/dev/null)"
     if [ "$(git rev-parse HEAD)" = "$(git rev-list -1 $RAWDESC 2>/dev/null)" ]; then
         echo BUILD_DIRTY_CHECK: "$(git diff-index --quiet HEAD --)"
         git diff-index --quiet HEAD -- && DESC=$RAWDESC
+        echo "DESC: $RAWDESC"
     fi
 
     SUFFIX=$(git rev-parse --short HEAD)
     CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-    # Move to this after git upgrade from base images 
+    # Move to this after git upgrade from base images
     # CURRENT_BRANCH="$(git branch --show-current)"
-    
+
     if [ -n "$CURRENT_BRANCH" ]; then
         # Make sure to replace `/` with `-`. Since this is
         # executed with posix shell, cannot do bashisms.
@@ -49,7 +53,7 @@ if [ "${BITCOIN_GENBUILD_NO_GIT}" != "1" ] && [ -e "$(command -v git)" ] && [ "$
 
     if [ "$CURRENT_BRANCH" != "hotfix" ] && [ "$CURRENT_BRANCH" != "master" ]; then
         # if it's hotfix branch, don't mark dirty.
-        # otherwise generate suffix from git, i.e. string like "59887e8-dirty". 
+        # otherwise generate suffix from git, i.e. string like "59887e8-dirty".
         git diff-index --quiet HEAD -- || SUFFIX="$SUFFIX-dirty"
     fi
 fi
