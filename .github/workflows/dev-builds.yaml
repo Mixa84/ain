@@ -37,7 +37,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
     
-    - run: git fetch --unshallow --tags --prune --progress 
+    - run: git fetch --unshallow --tags
 
     - name: Build and package
       run: TARGET="x86_64-pc-linux-gnu" ./make.sh docker-release-git
