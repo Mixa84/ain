@@ -7,6 +7,7 @@
 #include <masternodes/accountshistory.h> /// CAccountsHistoryWriter
 #include <masternodes/masternodes.h> /// CCustomCSView
 #include <masternodes/mn_checks.h> /// GetAggregatePrice
+#include <masternodes/mn_rpc.h>
 
 #include <core_io.h> /// ValueFromAmount
 #include <util/strencodings.h>
@@ -110,6 +111,8 @@ const std::map<uint8_t, std::map<std::string, uint8_t>>& ATTRIBUTES::allowedKeys
                 {"loan_collateral_factor",  TokenKeys::LoanCollateralFactor},
                 {"loan_minting_enabled",    TokenKeys::LoanMintingEnabled},
                 {"loan_minting_interest",   TokenKeys::LoanMintingInterest},
+                {"consortium_members",      TokenKeys::ConsortiumMembers},
+                {"consortium_mint_limit",   TokenKeys::ConsortiumMintLimit},
             }
         },
         {
@@ -147,6 +150,8 @@ const std::map<uint8_t, std::map<uint8_t, std::string>>& ATTRIBUTES::displayKeys
                 {TokenKeys::LoanCollateralFactor,  "loan_collateral_factor"},
                 {TokenKeys::LoanMintingEnabled,    "loan_minting_enabled"},
                 {TokenKeys::LoanMintingInterest,   "loan_minting_interest"},
+                {TokenKeys::ConsortiumMembers,     "consortium_members"},
+                {TokenKeys::ConsortiumMintLimit,   "consortium_mint_limit"},
             }
         },
         {
@@ -166,11 +171,13 @@ const std::map<uint8_t, std::map<uint8_t, std::string>>& ATTRIBUTES::displayKeys
         },
         {
             AttributeTypes::Live, {
-                {EconomyKeys::PaybackDFITokens,  "dfi_payback_tokens"},
-                {EconomyKeys::DFIP2203Current,   "dfip2203_current"},
-                {EconomyKeys::DFIP2203Burned,    "dfip2203_burned"},
-                {EconomyKeys::DFIP2203Minted,    "dfip2203_minted"},
-                {EconomyKeys::DexTokens,         "dex"},
+                {EconomyKeys::PaybackDFITokens,         "dfi_payback_tokens"},
+                {EconomyKeys::DFIP2203Current,          "dfip2203_current"},
+                {EconomyKeys::DFIP2203Burned,           "dfip2203_burned"},
+                {EconomyKeys::DFIP2203Minted,           "dfip2203_minted"},
+                {EconomyKeys::DexTokens,                "dex"},
+                {EconomyKeys::ConsortiumMinted,         "consortium_minted"},
+                {EconomyKeys::ConsortiumMembersMinted,  "consortium_members_minted"},
             }
         },
     };
@@ -236,6 +243,35 @@ static bool VerifyToken(const CCustomCSView& view, const uint32_t id) {
     return view.GetToken(DCT_ID{id}).has_value();
 }
 
+static ResVal<CAttributeValue> VerifyConsortiumMember(const std::string& str) {
+    const auto value = UniValue(str);
+    CConsortiumMembers member;
+
+    if (!value["id"].isNull() && (!ParseInt32(value["id"].getValStr(), &member.id) || member.id < 0))
+        return Res::Err("Id not a valid integer!");
+    else
+        member.id = -1;
+
+    member.name = trim_all_ws(value["name"].getValStr());
+    if (!value["ownerAddress"].isNull())
+        member.ownerAddress = DecodeScript(value["ownerAddress"].getValStr());
+    else
+        return Res::Err("Empty ownerAddress in consortium member data");
+    member.backingId = value["backingId"].getValStr();
+
+    if (!ParseInt64(value["mintLimit"].getValStr(), &member.mintLimit) || member.mintLimit < -1) {
+        return Res::Err("Mint limit value not a valid integer!");
+    }
+    if (!ParseInt64(value["mintLimitPerInterval"].getValStr(), &member.mintLimitPerInterval) || member.mintLimitPerInterval< -1) {
+        return Res::Err("Mint limit per interval not a valid integer!");
+    }
+    if (!ParseUInt32(value["mintLimitPerInterval"].getValStr(), &member.mintIntervalBlocks)) {
+        return Res::Err("Mint interval blocks not a valid integer!");
+    }
+
+    return {member, Res::Ok()};
+}
+
 const std::map<uint8_t, std::map<uint8_t,
     std::function<ResVal<CAttributeValue>(const std::string&)>>>& ATTRIBUTES::parseValue() {
 
@@ -255,6 +291,7 @@ const std::map<uint8_t, std::map<uint8_t,
                 {TokenKeys::LoanCollateralFactor,  VerifyPct},
                 {TokenKeys::LoanMintingEnabled,    VerifyBool},
                 {TokenKeys::LoanMintingInterest,   VerifyFloat},
+                {TokenKeys::ConsortiumMintLimit,   VerifyInt64},
             }
         },
         {
@@ -522,6 +559,20 @@ Res ATTRIBUTES::Import(const UniValue & val) {
                         }
                         SetValue(newAttr, attrValue);
                         return Res::Ok();
+                    } else if (attrV0->key == TokenKeys::ConsortiumMembers) {
+                        if (auto member = std::get_if<CConsortiumMembers>(&attrValue)) {
+                            CAttributeValue tmpValue;
+                            auto members = GetValue(*attrV0, std::vector<CConsortiumMembers>{});
+
+                            if (member->id != -1)
+                                members.at(member->id) = *member;
+                            else
+                                members.push_back(*member);
+
+                            SetValue(*attrV0, tmpValue);
+                            return Res::Ok();
+                        } else
+                            return Res::Err("Invalid member data");
                     }
                 }
                 SetValue(attribute, attrValue);
@@ -594,6 +645,16 @@ UniValue ATTRIBUTES::Export() const {
                     ret.pushKV(KeyBuilder(poolkey, "total_swap_a"), ValueFromUint(dexTokenA.swaps));
                     ret.pushKV(KeyBuilder(poolkey, "total_swap_b"), ValueFromUint(dexTokenB.swaps));
                 }
+            } else if (auto members = std::get_if<CConsortiumMembers>(&attribute.second)) {
+                UniValue result(UniValue::VOBJ);
+                result.pushKV("name", members->name);
+                result.pushKV("ownerAddress", ScriptToString(members->ownerAddress));
+                result.pushKV("backingId", members->backingId);
+                result.pushKV("mintLimit", ValueFromAmount(members->mintLimit));
+                result.pushKV("mintLimitPerInterval", ValueFromAmount(members->mintLimitPerInterval));
+                result.pushKV("mintIntervalBlocks", static_cast<int>(members->mintIntervalBlocks));
+                result.pushKV("status", members->status);
+                ret.pushKV(key, result);
             }
         } catch (const std::out_of_range&) {
             // Should not get here, that's mean maps are mismatched
@@ -674,6 +735,11 @@ Res ATTRIBUTES::Validate(const CCustomCSView & view) const
                         if (!VerifyToken(view, attrV0->typeId)) {
                             return Res::Err("No such token (%d)", attrV0->typeId);
                         }
+                        break;
+                    case TokenKeys::ConsortiumMembers:
+                        if (!view.GetToken(DCT_ID{attrV0->typeId})) {
+                                return Res::Err("No such token (%d)", attrV0->typeId);
+                            }
                         break;
                     default:
                         return Res::Err("Unsupported key");
