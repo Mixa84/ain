@@ -152,8 +152,9 @@ struct CDexTokenInfo {
     }
 };
 
-struct CConsortiumMembers {
-    int32_t id;
+struct CConsortiumMember {
+    static const uint8_t MAX_CONSORTIUM_MEMBERS_STRING_LENGHT = 64;
+
     std::string name;
     CScript ownerAddress;
     std::string backingId;
@@ -176,7 +177,7 @@ struct CConsortiumMembers {
     }
 };
 
-struct CConsortiumMembersMinted {
+struct CConsortiumMemberMinted {
     CBalances minted;
     CBalances mintedPerInterval;
 
@@ -191,8 +192,11 @@ struct CConsortiumMembersMinted {
 
 using CDexBalances = std::map<DCT_ID, CDexTokenInfo>;
 using CAttributeType = std::variant<CDataStructureV0>;
+using CConsortiumMembers = std::vector<CConsortiumMember>;
+using CConsortiumMembersMinted = std::vector<CConsortiumMemberMinted>;
+
 using CAttributeValue = std::variant<bool, CAmount, CBalances, CTokenPayback, CDexBalances, CTokenCurrencyPair,
-                                        CConsortiumMembers, std::vector<CConsortiumMembers>, std::vector<CConsortiumMembersMinted>>;
+                                        CConsortiumMembers, CConsortiumMembersMinted>;
 
 class ATTRIBUTES : public GovVariable, public AutoRegistrator<GovVariable, ATTRIBUTES>
 {

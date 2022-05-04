@@ -380,6 +380,7 @@ class PaybackDFILoanTest (DefiTestFramework):
         assert_equal(info['paybackburn'], old_info['paybackburn'] + Decimal('24.27368714'))
 
         attribs = self.nodes[0].getgov('ATTRIBUTES')['ATTRIBUTES']
+        print(attribs)
         assert_equal(attribs['v0/live/economy/dfi_payback_tokens'], ['1.27368435@DFI', '100.00001113@DUSD'])
 
         vaultAfter = self.nodes[0].getvault(self.vaultId1)

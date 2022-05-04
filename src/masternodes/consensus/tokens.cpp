@@ -110,34 +110,37 @@ Res CTokensConsensus::operator()(const CMintTokensMessage& obj) const {
         if (!mintable)
             return std::move(mintable);
 
-        if (static_cast<int>(height) >= consensus.FortCanningRoadHeight && token->IsDAT() && !HasFoundationAuth())
+        if (static_cast<int>(height) >= consensus.GreatWorldHeight && token->IsDAT() && !HasFoundationAuth())
         {
             mintable.ok = false;
 
             auto attributes = mnview.GetAttributes();
 
             CDataStructureV0 membersKey{AttributeTypes::Token, tokenId.v, TokenKeys::ConsortiumMembers};
-            auto members = attributes->GetValue(membersKey, std::vector<CConsortiumMembers>{});
+            auto members = attributes->GetValue(membersKey, CConsortiumMembers{});
 
             CDataStructureV0 membersMintedKey{AttributeTypes::Live, ParamIDs::Economy, EconomyKeys::ConsortiumMembersMinted};
-            auto memberBalances = attributes->GetValue(membersMintedKey, std::vector<CConsortiumMembersMinted>{});
+            auto membersBalances = attributes->GetValue(membersMintedKey, CConsortiumMembersMinted{});
 
             for (size_t i=0; i < members.size(); i++)
             {
                 auto member = members[i];
-                if (mintable.val == member.ownerAddress)
+
+                if (HasAuth(member.ownerAddress))
                 {
-                    if (memberBalances[i].minted.balances[tokenId] + kv.second > member.mintLimit)
+                    if (membersBalances[i].minted.balances[tokenId] + amount > member.mintLimit)
                         return Res::Err("You will exceed your maximum mint limit for %s token by minting this amount!", tokenImpl.symbol);
 
-                    memberBalances[i].minted.Add(CTokenAmount{tokenId, kv.second});
+                    membersBalances[i].minted.Add(CTokenAmount{tokenId, amount});
+                    *mintable.val = member.ownerAddress;
                     mintable.ok = true;
+                    attributes->SetValue(membersMintedKey, membersBalances);
                     break;
                 }
             }
 
             if (!mintable)
-                return Res::Err("You are not a member of consortium and cannot mint this token!");
+                return Res::Err("You are not a foundation or consortium member and cannot mint this token!");
 
             CDataStructureV0 maxLimitKey{AttributeTypes::Token, tokenId.v, TokenKeys::ConsortiumMintLimit};
             auto maxLimit = attributes->GetValue(maxLimitKey, CAmount{0});
@@ -145,22 +148,26 @@ Res CTokensConsensus::operator()(const CMintTokensMessage& obj) const {
             CDataStructureV0 consortiumMintedKey{AttributeTypes::Live, ParamIDs::Economy, EconomyKeys::ConsortiumMinted};
             auto globalBalnaces = attributes->GetValue(consortiumMintedKey, CBalances{});
 
-            if (globalBalnaces.balances[tokenId] + kv.second > maxLimit)
+            if (globalBalnaces.balances[tokenId] + amount > maxLimit)
                 return Res::Err("You will exceed global maximum mint limit for %s token by minting this amount!", tokenImpl.symbol);
 
-            globalBalnaces.Add(CTokenAmount{tokenId, kv.second});
-            attributes->SetValue(membersMintedKey, members);
+            globalBalnaces.Add(CTokenAmount{tokenId, amount});
             attributes->SetValue(consortiumMintedKey, globalBalnaces);
+
+            auto saved = mnview.SetVariable(*attributes);
+            if (!saved)
+                return saved;
         }
 
-        auto minted = mnview.AddMintedTokens(tokenId, kv.second);
+        auto minted = mnview.AddMintedTokens(tokenId, amount);
         if (!minted)
             return minted;
 
         CalculateOwnerRewards(*mintable.val);
-        auto res = mnview.AddBalance(*mintable.val, CTokenAmount{kv.first, kv.second});
+        auto res = mnview.AddBalance(*mintable.val, CTokenAmount{tokenId, amount});
         if (!res)
             return res;
     }
+
     return Res::Ok();
 }
