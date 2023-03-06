@@ -2,7 +2,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
 
-DIST_SUBDIRS = secp256k1 univalue sputnikVM
+DIST_SUBDIRS = secp256k1 univalue
 
 AM_LDFLAGS = $(PTHREAD_CFLAGS) $(LIBTOOL_LDFLAGS) $(HARDENED_LDFLAGS) $(GPROF_LDFLAGS) $(SANITIZER_LDFLAGS)
 AM_CXXFLAGS = $(DEBUG_CXXFLAGS) $(HARDENED_CXXFLAGS) $(WARN_CXXFLAGS) $(NOWARN_CXXFLAGS) $(ERROR_CXXFLAGS) $(GPROF_CXXFLAGS) $(SANITIZER_CXXFLAGS)
@@ -21,7 +21,7 @@ endif
 
 LIBDEFI_SPV=libdefi_spv.a
 SPV_INCLUDES=-I. -I./spv -I./spv/support -I./spv/bitcoin -I./spv/bcash
-LIBEVM_INCLUDES=-I$(srcdir)/sputnikVM/include
+LIBEVM_INCLUDES=-I$(srcdir)/evm/include
 
 DEFI_INCLUDES=-I$(builddir) $(BDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS)
 
@@ -38,7 +38,7 @@ LIBDEFI_UTIL=libdefi_util.a
 LIBDEFI_CRYPTO_BASE=crypto/libdefi_crypto_base.a
 LIBDEFIQT=qt/libdefiqt.a
 LIBSECP256K1=secp256k1/libsecp256k1.la
-LIBEVM=sputnikVM/libevm.a
+LIBEVM=evm/libevm.a
 
 if ENABLE_ZMQ
 LIBDEFI_ZMQ=libdefi_zmq.a
@@ -69,7 +69,7 @@ $(LIBSECP256K1): $(wildcard secp256k1/src/*.h) $(wildcard secp256k1/src/*.c) $(w
 	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -C $(@D) $(@F)
 
 $(LIBEVM): FORCE
-	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -C sputnikVM
+	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -C evm
 
 # Make is not made aware of per-object dependencies to avoid limiting building parallelization
 # But to build the less dependent modules first, we manually select their order here:
@@ -154,6 +154,7 @@ DEFI_CORE_H = \
   key.h \
   key_io.h \
   dbwrapper.h \
+  libevm.h \
   limitedmap.h \
   logging.h \
   masternodes/accounts.h \
@@ -374,6 +375,7 @@ libdefi_server_a_SOURCES = \
   blockfilter.cpp \
   chain.cpp \
   consensus/tx_verify.cpp \
+  evm/libevm.cpp \
   flatfile.cpp \
   httprpc.cpp \
   httpserver.cpp \
@@ -382,8 +384,6 @@ libdefi_server_a_SOURCES = \
   index/txindex.cpp \
   interfaces/chain.cpp \
   init.cpp \
-  sputnikVM/libevm.cpp \
-  libevm.h \
   dbwrapper.cpp \
   masternodes/accounts.cpp \
   masternodes/accountshistory.cpp \
@@ -690,6 +690,13 @@ defid_CPPFLAGS = $(AM_CPPFLAGS) $(DEFI_INCLUDES)
 defid_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 defid_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
+if BUILD_NOT_DARWIN
+defid_LDFLAGS += -Wl,--allow-multiple-definition
+endif
+if TARGET_NOT_WINDOWS
+defid_LDFLAGS += -ldl
+endif
+
 # Libraries below may be listed more than once to resolve circular dependencies (see
 # https://eli.thegreenplace.net/2013/07/09/library-order-in-static-linking#circular-dependency)
 defid_LDADD = \
@@ -830,7 +837,7 @@ $(top_srcdir)/$(subdir)/config/defi-config.h.in:  $(am__configure_deps)
 clean-local:
 	-$(MAKE) -C secp256k1 clean
 	-$(MAKE) -C univalue clean
-	-$(MAKE) -C sputnikVM clean
+	-$(MAKE) -C evm clean
 	-rm -f leveldb/*/*.gcda leveldb/*/*.gcno leveldb/helpers/memenv/*.gcda leveldb/helpers/memenv/*.gcno
 	-rm -f config.h
 	-rm -rf test/__pycache__
