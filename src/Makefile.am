@@ -367,7 +367,6 @@ $(LIBSECP256K1_GEN): $(LIBSECP256K1)
 # libdefi_common or libdefi_util libraries, instead.
 libdefi_server_a_CPPFLAGS = $(AM_CPPFLAGS) $(DEFI_INCLUDES) $(MINIUPNPC_CPPFLAGS) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS)
 libdefi_server_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-libdefi_server_a_LIBADD = $(LIBEVM)
 libdefi_server_a_SOURCES = \
   addrdb.cpp \
   addrman.cpp \
@@ -691,14 +690,8 @@ defid_CPPFLAGS = $(AM_CPPFLAGS) $(DEFI_INCLUDES)
 defid_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 defid_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
-if TARGET_DARWIN
-defid_LDFLAGS += -framework Security -framework SystemConfiguration -framework CoreFoundation
-endif
 if BUILD_NOT_DARWIN
 defid_LDFLAGS += -Wl,--allow-multiple-definition
-endif
-if TARGET_NOT_WINDOWS
-defid_LDFLAGS += -ldl
 endif
 
 # Libraries below may be listed more than once to resolve circular dependencies (see
@@ -720,6 +713,10 @@ defid_LDADD = \
   $(LIBEVM)
 
 defid_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS)
+
+if TARGET_NOT_WINDOWS
+defid_LDADD += -ldl
+endif
 
 # defi-cli binary #
 defi_cli_SOURCES = defi-cli.cpp
