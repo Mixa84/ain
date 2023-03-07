@@ -977,6 +977,18 @@ public:
 
                 const auto keyID = CKeyID(uint160(rawAddress));
                 mnview.SetForcedRewardAddress(obj.mnId, *node, addressType, keyID, height);
+
+                // Store history of all reward address changes. This allows us to call CalculateOwnerReward
+                // on reward addresses owned by the local wallet. This can be removed some time after the
+                // next hard fork as this is a workaround for the issue fixed in the following PR:
+                // https://github.com/DeFiCh/ain/pull/1766
+                if (auto addresses = mnview.SettingsGetRewardAddresses()) {
+                    const CScript rewardAddress = GetScriptForDestination(addressType == PKHashType ?
+                                                                          CTxDestination(PKHash(keyID)) :
+                                                                          CTxDestination(WitnessV0KeyHash(keyID)));
+                    addresses->insert(rewardAddress);
+                    mnview.SettingsSetRewardAddresses(*addresses);
+                }
             } else if (type == static_cast<uint8_t>(UpdateMasternodeType::RemRewardAddress)) {
                 CDataStructureV0 key{AttributeTypes::Param, ParamIDs::Feature, DFIPKeys::MNSetRewardAddress};
                 if (!attributes->GetValue(key, false)) {
@@ -1569,6 +1581,10 @@ public:
 
         Require(token->symbol == "BTC" && token->name == "Bitcoin" && token->IsDAT(),
                 "Only Bitcoin can be swapped in " + obj.name);
+
+        if (height >= static_cast<uint32_t>(consensus.NextNetworkUpgradeHeight)) {
+            mnview.CalculateOwnerRewards(script, height);
+        }
 
         Require(mnview.SubBalance(script, {id, amount}));
 
@@ -3130,6 +3146,10 @@ public:
             }
         }
 
+        if (height >= static_cast<uint32_t>(consensus.NextNetworkUpgradeHeight)) {
+            mnview.CalculateOwnerRewards(obj.to, height);
+        }
+
         return mnview.AddBalance(obj.to, obj.amount);
     }
 
@@ -3306,7 +3326,7 @@ public:
             CBalances *loan;
             if (id == DCT_ID{0}) {
                 auto tokenDUSD = mnview.GetToken("DUSD");
-                if (!tokenDUSD) return DeFiErrors::LoanTokenInvalid("DUSD");
+                if (!tokenDUSD) return DeFiErrors::LoanTokenNotFoundForName("DUSD");
                 loan = &loans[tokenDUSD->first];
             } else
                 loan = &loans[id];
@@ -3322,9 +3342,9 @@ public:
             return res;
 
         const auto vault = mnview.GetVault(obj.vaultId);
-        if (!vault) return DeFiErrors::VaultInvalid(obj.vaultId.GetHex());
+        if (!vault) return DeFiErrors::VaultInvalid(obj.vaultId);
 
-        if (vault->isUnderLiquidation) return DeFiErrors::VaultUnderLiquidation();
+        if (vault->isUnderLiquidation) return DeFiErrors::LoanNoPaybackOnLiquidation();
 
         if (!mnview.GetVaultCollaterals(obj.vaultId)) return DeFiErrors::VaultNoCollateral(obj.vaultId.GetHex());
 
@@ -3346,7 +3366,7 @@ public:
 
         for (const auto &[loanTokenId, paybackAmounts] : obj.loans) {
             const auto loanToken = mnview.GetLoanTokenByID(loanTokenId);
-            if (!loanToken) return DeFiErrors::LoanTokenIdInvalid(loanTokenId.ToString());
+            if (!loanToken) return DeFiErrors::LoanTokenIdInvalid(loanTokenId);
 
             for (const auto &kv : paybackAmounts.balances) {
                 const auto &paybackTokenId = kv.first;
@@ -3359,7 +3379,7 @@ public:
                 CAmount paybackUsdPrice{0}, loanUsdPrice{0}, penaltyPct{COIN};
 
                 auto paybackToken = mnview.GetToken(paybackTokenId);
-                if (!paybackToken) return DeFiErrors::TokenIdInvalid(paybackTokenId.ToString());
+                if (!paybackToken) return DeFiErrors::TokenIdInvalid(paybackTokenId);
 
                 if (loanTokenId != paybackTokenId) {
                     if (!IsVaultPriceValid(mnview, obj.vaultId, height)) return DeFiErrors::LoanAssetPriceInvalid();
@@ -3398,8 +3418,9 @@ public:
                     if (loanToken->symbol == "DUSD") {
                         paybackAmount = usdAmount;
                         if (paybackUsdPrice > COIN) {
-                            if (paybackAmount < kv.second) return DeFiErrors::LoanPriceInvalid(
-                                        GetDecimaleString(kv.second), GetDecimaleString(paybackUsdPrice));
+                            if (paybackAmount < kv.second) {
+                                return DeFiErrors::AmountOverflowAsValuePrice(kv.second, paybackUsdPrice);
+                            }
                         }
                     } else {
                         // Get dToken price in USD
@@ -3417,9 +3438,10 @@ public:
                 }
 
                 const auto loanAmounts = mnview.GetLoanTokens(obj.vaultId);
-                if (!loanAmounts) return DeFiErrors::LoanInvalidVault(obj.vaultId.GetHex());
+                if (!loanAmounts) return DeFiErrors::LoanInvalidVault(obj.vaultId);
 
-                if (!loanAmounts->balances.count(loanTokenId)) return DeFiErrors::LoanInvalidToken(loanToken->symbol);
+                if (!loanAmounts->balances.count(loanTokenId)) 
+                    return DeFiErrors::LoanInvalidTokenForSymbol(loanToken->symbol);
 
                 const auto &currentLoanAmount = loanAmounts->balances.at(loanTokenId);
 
@@ -4627,7 +4649,7 @@ Res PaybackWithCollateral(CCustomCSView &view,
     if (!attributes) return DeFiErrors::MNInvalidAttribute();
 
     const auto dUsdToken = view.GetToken("DUSD");
-    if (!dUsdToken) return DeFiErrors::TokenInvalid("DUSD");
+    if (!dUsdToken) return DeFiErrors::TokenInvalidForName("DUSD");
 
     CDataStructureV0 activeKey{AttributeTypes::Token, dUsdToken->first.v, TokenKeys::LoanPaybackCollateral};
     if (!attributes->GetValue(activeKey, false)) return DeFiErrors::LoanPaybackWithCollateralDisable();
