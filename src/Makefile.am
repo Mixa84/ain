@@ -715,6 +715,7 @@ defid_LDADD = \
 defid_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS)
 
 if TARGET_NOT_WINDOWS
+defid_LDFLAGS += -ldl
 defid_LDADD += -ldl
 endif
 
