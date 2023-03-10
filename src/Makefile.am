@@ -723,6 +723,9 @@ endif
 if TARGET_NOT_WINDOWS
 defid_LDADD += -ldl
 endif
+if TARGET_WINDOWS
+defid_LDADD += -luserenv -lbcrypt
+endif
 
 # defi-cli binary #
 defi_cli_SOURCES = defi-cli.cpp
