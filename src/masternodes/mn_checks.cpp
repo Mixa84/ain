@@ -141,6 +141,10 @@ std::string ToString(CustomTxType type) {
             return "Vote";
         case CustomTxType::UnsetGovVariable:
             return "UnsetGovVariable";
+        case CustomTxType::EvmInOut:
+            return "EvmInOut";
+        case CustomTxType::EvmTx:
+            return "EvmTx";
         case CustomTxType::None:
             return "None";
     }
@@ -298,6 +302,10 @@ CCustomTxMessage customTypeToMessage(CustomTxType txType) {
             return CCustomTxMessageNone{};
         case CustomTxType::UnsetGovVariable:
             return CGovernanceUnsetMessage{};
+        case CustomTxType::EvmInOut:
+            return CEvmInOutMessage{};
+        case CustomTxType::EvmTx:
+            return CEvmTxMessage{};
         case CustomTxType::None:
             return CCustomTxMessageNone{};
     }
@@ -424,6 +432,10 @@ public:
                 CProposalVoteMessage,
                 CGovernanceUnsetMessage>())
             return IsHardforkEnabled(consensus.GrandCentralHeight);
+        else if constexpr (IsOneOf<T,
+                CEvmInOutMessage,
+                CEvmTxMessage>())
+            return IsHardforkEnabled(consensus.NextNetworkUpgradeHeight);
         else if constexpr (IsOneOf<T,
                 CCreateMasterNodeMessage,
                 CResignMasterNodeMessage>())
@@ -3440,7 +3452,7 @@ public:
                 const auto loanAmounts = mnview.GetLoanTokens(obj.vaultId);
                 if (!loanAmounts) return DeFiErrors::LoanInvalidVault(obj.vaultId);
 
-                if (!loanAmounts->balances.count(loanTokenId)) 
+                if (!loanAmounts->balances.count(loanTokenId))
                     return DeFiErrors::LoanInvalidTokenForSymbol(loanToken->symbol);
 
                 const auto &currentLoanAmount = loanAmounts->balances.at(loanTokenId);
@@ -3786,6 +3798,33 @@ public:
         }
         auto vote = static_cast<CProposalVoteType>(obj.vote);
         return mnview.AddProposalVote(obj.propId, obj.masternodeId, vote);
+    }
+
+    Res operator()(const CEvmInOutMessage &obj) const {
+        // owner auth
+        for (const auto& [fromTo, amounts]: obj.fromToMap) {
+            Require(HasAuth(fromTo.first), DeFiErrors::TXMissingInput().msg);
+
+            CalculateOwnerRewards(fromTo.first);
+
+            for (const auto& amount : amounts.balances) {
+                auto token = mnview.GetToken(amount.first);
+                if (!token) return DeFiErrors::TokenIdInvalid(amount.first);
+
+                if (obj.type == CEvmInOutType::EvmIn)
+                    Require(mnview.SubBalance(fromTo.first, CTokenAmount{amount.first, amount.second}));
+                else
+                    Require(mnview.AddBalance(fromTo.second, CTokenAmount{amount.first, amount.second}));
+            }
+        }
+
+        return Res::Ok();
+    }
+
+    Res operator()(const CEvmTxMessage &obj) const {
+        if (obj.evmTx.size() > static_cast<size_t>(EVM_TX_SIZE))
+            return Res::Err("evm tx size too large");
+        return Res::Ok();
     }
 
     Res operator()(const CCustomTxMessageNone &) const { return Res::Ok(); }

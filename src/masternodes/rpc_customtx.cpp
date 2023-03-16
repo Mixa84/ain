@@ -546,6 +546,30 @@ public:
         rpcInfo.pushKV("vote", CProposalVoteToString(vote));
     }
 
+    void operator()(const CEvmInOutMessage &obj) const {
+        UniValue map{UniValue::VARR};
+        rpcInfo.pushKV("type", CEvmInOutTypeToString(static_cast<CEvmInOutType>(obj.type)));
+        for (const auto &fromTo : obj.fromToMap) {
+            UniValue item{UniValue::VOBJ};
+            item.pushKV("from", ScriptToString(fromTo.first.first));
+            item.pushKV("to", ScriptToString(fromTo.first.second));
+            for (const auto &kv : fromTo.second.balances) {
+                if (auto token = mnview.GetToken(kv.first)) {
+                    auto tokenImpl = static_cast<const CTokenImplementation &>(*token);
+                    if (auto tokenPair = mnview.GetTokenByCreationTx(tokenImpl.creationTx)) {
+                        item.pushKV(tokenPair->first.ToString(), ValueFromAmount(kv.second));
+                    }
+                }
+            }
+            map.push_back(item);
+        }
+        rpcInfo.pushKV("map", map);
+    }
+
+    void operator()(const CEvmTxMessage &obj) const {
+        rpcInfo.pushKV("evmTx", HexStr(obj.evmTx.begin(),obj.evmTx.end()));
+    }
+
     void operator()(const CCustomTxMessageNone &) const {}
 };
 
