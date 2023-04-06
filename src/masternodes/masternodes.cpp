@@ -1051,7 +1051,7 @@ ResVal<CAmount> CCustomCSView::GetValidatedIntervalPrice(const CTokenCurrencyPai
 
     auto priceRecordIndex = useNextPrice ? 1 : 0;
     auto price            = priceFeed.val->priceRecord[priceRecordIndex];
-    
+
     if (price <= 0) {
         return DeFiErrors::OracleNegativePrice(tokenSymbol, currency);
     }
@@ -1372,4 +1372,18 @@ void CalcMissingRewardTempFix(CCustomCSView &mnview, const uint32_t targetHeight
             }
         }
     }
+}
+
+std::unique_ptr<CBalances> FFIGetBalance(std::unique_ptr<CScript> reqOwner);
+{
+    CBalances amounts;
+    pcustomcsview->ForEachBalance(
+        [&](const CScript &owner, CTokenAmount balance) {
+            if (owner != reqOwner) {
+                return false;
+            }
+            amounts.Add(balance);
+        },
+        BalanceKey{*reqOwner, {}});
+    return std::make_uniqe(amounts);
 }

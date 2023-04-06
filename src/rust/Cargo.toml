@@ -4,6 +4,7 @@ members = [
     "crates/ain-evm-state",
     "crates/ain-evm-runtime",
     "crates/ain-evm-ffi",
+    "crates/ain-evm-cpp-ffi",
     "crates/ain-grpc",
     "crates/ain-utils",
 ]

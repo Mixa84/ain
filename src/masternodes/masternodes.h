@@ -587,4 +587,6 @@ std::map<CKeyID, CKey> AmISignerNow(int height, const CAnchorData::CTeam &team);
 extern std::unique_ptr<CStorageLevelDB> pcustomcsDB;
 extern std::unique_ptr<CCustomCSView> pcustomcsview;
 
+std::unique_ptr<CBalances> FFIGetBalance(std::unique_ptr<CScript> reqOwner);
+
 #endif  // DEFI_MASTERNODES_MASTERNODES_H
