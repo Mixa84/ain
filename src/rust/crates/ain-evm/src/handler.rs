@@ -1,5 +1,5 @@
 use crate::block::BlockHandler;
-use crate::evm::{EVMHandler, get_vicinity};
+use crate::evm::{get_vicinity, EVMHandler};
 use crate::executor::AinExecutor;
 use crate::traits::Executor;
 use ethereum::{Block, PartialHeader, TransactionV2};

@@ -2,7 +2,8 @@ use crate::codegen::rpc::{
     ffi::{
         EthAccountsResult, EthBlockInfo, EthBlockNumberResult, EthCallInput, EthCallResult,
         EthChainIdResult, EthGetBalanceInput, EthGetBalanceResult, EthGetBlockByHashInput,
-        EthGetBlockByNumberInput, EthMiningResult, EthTransactionInfo,
+        EthGetBlockByNumberInput, EthMiningResult, EthSendRawTransactionInput,
+        EthSendRawTransactionResult, EthTransactionInfo,
     },
     EthService,
 };
@@ -45,6 +46,11 @@ pub trait EthServiceApi {
     ) -> Result<EthBlockInfo, jsonrpsee_core::Error>;
 
     fn Eth_Mining(handler: Arc<Handlers>) -> Result<EthMiningResult, jsonrpsee_core::Error>;
+
+    fn Eth_SendRawTransaction(
+        handler: Arc<Handlers>,
+        input: EthSendRawTransactionInput,
+    ) -> Result<EthSendRawTransactionResult, jsonrpsee_core::Error>;
 }
 
 impl EthServiceApi for EthService {
@@ -210,6 +216,22 @@ impl EthServiceApi for EthService {
         let mining = ain_evm_cpp_ffi::is_mining().unwrap();
 
         Ok(EthMiningResult { is_mining: mining })
+    }
+
+    fn Eth_SendRawTransaction(
+        handler: Arc<Handlers>,
+        input: EthSendRawTransactionInput,
+    ) -> Result<EthSendRawTransactionResult, jsonrpsee_core::Error> {
+        let EthSendRawTransactionInput { transaction } = input;
+
+        let hex = hex::decode(transaction).expect("Invalid transaction");
+        let stat = ain_evm_cpp_ffi::publish_eth_transaction(hex).unwrap();
+
+        println!("{stat}");
+
+        Ok(EthSendRawTransactionResult{
+            hash: ":)".to_string()
+        })
     }
 }
 

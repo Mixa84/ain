@@ -66,6 +66,7 @@ dependencies = [
  "env_logger",
  "ethereum",
  "heck",
+ "hex",
  "jsonrpsee-core",
  "jsonrpsee-http-client",
  "jsonrpsee-http-server",
