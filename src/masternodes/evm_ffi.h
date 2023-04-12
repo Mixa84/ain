@@ -2,7 +2,7 @@
 #define DEFI_EVM_FFI_H
 
 #include <chainparams.h>
-#include "rust/include/libain_evm.h"
+#include <rust/target/cxxbridge/rust/cxx.h>
 
 uint64_t getChainId();
 bool isMining();

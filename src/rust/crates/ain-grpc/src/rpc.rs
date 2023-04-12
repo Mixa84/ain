@@ -229,8 +229,8 @@ impl EthServiceApi for EthService {
 
         println!("{stat}");
 
-        Ok(EthSendRawTransactionResult{
-            hash: ":)".to_string()
+        Ok(EthSendRawTransactionResult {
+            hash: ":)".to_string(),
         })
     }
 }
