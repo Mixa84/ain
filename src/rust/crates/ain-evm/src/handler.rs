@@ -1,5 +1,5 @@
 use crate::block::BlockHandler;
-use crate::evm::EVMHandler;
+use crate::evm::{EVMHandler, get_vicinity};
 use crate::executor::AinExecutor;
 use crate::traits::Executor;
 use ethereum::{Block, PartialHeader, TransactionV2};
@@ -7,7 +7,6 @@ use evm::backend::{MemoryBackend, MemoryVicinity};
 use primitive_types::{H160, H256, U256};
 use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
-
 pub struct Handlers {
     pub evm: EVMHandler,
     pub block: BlockHandler,
@@ -26,8 +25,8 @@ impl Handlers {
         context: u64,
         update_state: bool,
     ) -> Result<(Block<TransactionV2>, Vec<TransactionV2>), Box<dyn Error>> {
-        let mut tx_hashes = Vec::with_capacity(self.evm.tx_queues.len(context));
-        let mut failed_tx_hashes = Vec::with_capacity(self.evm.tx_queues.len(context));
+        let mut transactions = Vec::with_capacity(self.evm.tx_queues.len(context));
+        let mut failed_transactions = Vec::with_capacity(self.evm.tx_queues.len(context));
         let vicinity = get_vicinity(None, None);
         let state = self.evm.tx_queues.state(context).expect("Wrong context");
         let backend = MemoryBackend::new(&vicinity, state);
@@ -36,11 +35,15 @@ impl Handlers {
         for signed_tx in self.evm.tx_queues.drain_all(context) {
             let tx_response = executor.exec(&signed_tx);
             if tx_response.exit_reason.is_succeed() {
-                tx_hashes.push(signed_tx.transaction);
+                transactions.push(signed_tx.transaction);
             } else {
-                failed_tx_hashes.push(signed_tx.transaction)
+                failed_transactions.push(signed_tx.transaction)
             }
         }
+
+        let mut all_transactions: Vec<TransactionV2> = Vec::new();
+        all_transactions.extend(transactions.clone());
+        all_transactions.extend(failed_transactions.clone());
 
         self.evm.tx_queues.remove(context);
 
@@ -76,27 +79,12 @@ impl Handlers {
                 mix_hash: Default::default(),
                 nonce: Default::default(),
             },
-            tx_hashes,
+            all_transactions,
             Vec::new(),
         );
 
         self.block.connect_block(block.clone());
 
-        Ok((block, failed_tx_hashes))
-    }
-}
-
-fn get_vicinity(origin: Option<H160>, gas_price: Option<U256>) -> MemoryVicinity {
-    MemoryVicinity {
-        gas_price: gas_price.unwrap_or(U256::MAX),
-        origin: origin.unwrap_or_default(),
-        block_hashes: Vec::new(),
-        block_number: Default::default(),
-        block_coinbase: Default::default(),
-        block_timestamp: Default::default(),
-        block_difficulty: Default::default(),
-        block_gas_limit: U256::MAX,
-        chain_id: U256::one(),
-        block_base_fee_per_gas: U256::MAX,
+        Ok((block, failed_transactions))
     }
 }
